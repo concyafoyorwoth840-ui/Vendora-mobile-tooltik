@@ -70,3 +70,7 @@ For a local Windows build with Python 3.11+ and Node.js 20+:
 3. Run `npm run dist:win` inside `desktop`.
 
 A successful CI package build verifies the build and smoke-test steps, but physical-device behaviour still requires testing on supported sample phones. No claim of universal device compatibility or risk-free repair is made.
+
+
+## Phone-to-phone transfer (shared files)
+Vendora includes an ADB-based transfer operation for two Android phones that are both online and authorised on the PC. It copies accessible shared-storage folders (DCIM, Pictures, Movies, Music and Download) through a temporary local staging directory, then places the copied folders in a new `Vendora_Transfer_YYYYMMDD_HHMMSS` folder on the destination phone. Both device serials are checked before copying begins. This is not an app migration or a WhatsApp/chat transfer: private app data, accounts, messages, settings and protected content are not included. Physical-device testing is required across supported Android versions and manufacturers.
