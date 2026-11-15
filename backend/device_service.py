@@ -1,5 +1,5 @@
 from __future__ import annotations
-import hashlib, json, os, re, shutil, subprocess, zipfile, secrets, threading, time
+import hashlib, json, os, re, shutil, subprocess, zipfile, secrets, threading, time, secrets, threading, time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -283,3 +283,78 @@ def prepare_factory_reset(serial: str, backup_confirmed: bool, confirmation: str
         "result": result,
         "message": "The phone was asked to reboot into recovery. Vendora did NOT erase data. Review the recovery screen on the phone; only choose Wipe data/factory reset there if the owner has explicitly authorised erasure."
     }
+
+# Short-lived, single-use approvals are held only in this local backend process.
+_APPROVAL_TTL_SECONDS = 120
+_APPROVAL_LOCK = threading.Lock()
+_PENDING_CHALLENGES: dict[str, dict[str, Any]] = {}
+_APPROVED_TOKENS: dict[str, dict[str, Any]] = {}
+
+def _approval_payload(serial: str, operation: str, target: str = "",
+                      backup_confirmed: bool = False, confirmation: str = "") -> dict[str, Any]:
+    if not _valid_serial(serial):
+        raise ValueError("Invalid device serial")
+    if operation == "reboot":
+        if target not in SAFE_REBOOT_TARGETS:
+            raise ValueError("Unsupported reboot target")
+        return {"serial": serial, "operation": operation, "target": target}
+    if operation == "factory_reset_prepare":
+        if backup_confirmed is not True or confirmation != "PREPARE RECOVERY":
+            raise ValueError("Factory recovery preparation requires backup confirmation and the exact PREPARE RECOVERY phrase.")
+        return {"serial": serial, "operation": operation, "target": "recovery",
+                "backup_confirmed": True, "confirmation": confirmation}
+    raise ValueError("This operation is not available for approval")
+
+def create_operation_preview(serial: str, operation: str, target: str = "",
+                             backup_confirmed: bool = False, confirmation: str = "") -> dict[str, Any]:
+    payload = _approval_payload(serial, operation, target, backup_confirmed, confirmation)
+    identity = android_properties(serial)
+    if not identity.get("ok"):
+        raise ValueError(identity.get("error") or "The selected device could not be verified.")
+    challenge = secrets.token_urlsafe(24)
+    with _APPROVAL_LOCK:
+        _PENDING_CHALLENGES[challenge] = {"payload": payload, "expires": time.monotonic() + _APPROVAL_TTL_SECONDS}
+    audit("operation_approval_requested", {"serial": serial, "operation": operation, "target": payload["target"]})
+    return {"ok": True, "challenge_id": challenge, "expires_in_seconds": _APPROVAL_TTL_SECONDS,
+            "operation": payload, "device": identity.get("properties", {})}
+
+def approve_operation(challenge_id: str) -> dict[str, Any]:
+    if not challenge_id or len(challenge_id) > 128:
+        raise ValueError("Invalid approval challenge")
+    with _APPROVAL_LOCK:
+        challenge = _PENDING_CHALLENGES.pop(challenge_id, None)
+        if not challenge or challenge["expires"] < time.monotonic():
+            audit("operation_approval_expired_or_invalid", {})
+            raise ValueError("Approval request expired or is invalid. Prepare it again.")
+        token = secrets.token_urlsafe(32)
+        _APPROVED_TOKENS[token] = {"payload": challenge["payload"], "expires": time.monotonic() + _APPROVAL_TTL_SECONDS}
+    audit("operation_approved", {"serial": challenge["payload"]["serial"],
+          "operation": challenge["payload"]["operation"], "target": challenge["payload"]["target"]})
+    return {"ok": True, "approval_token": token, "expires_in_seconds": _APPROVAL_TTL_SECONDS}
+
+def _consume_approval(token: str, expected: dict[str, Any]) -> None:
+    if not token or len(token) > 256:
+        raise ValueError("A fresh approval for this exact operation is required.")
+    with _APPROVAL_LOCK:
+        record = _APPROVED_TOKENS.pop(token, None)
+        if not record or record["expires"] < time.monotonic() or record["payload"] != expected:
+            audit("operation_rejected_missing_expired_or_mismatched_approval",
+                  {"serial": expected.get("serial"), "operation": expected.get("operation")})
+            raise ValueError("Approval is missing, expired, already used, or does not match this device and operation. Prepare and approve again.")
+
+def _perform_reboot_android(serial: str, target: str) -> dict[str, Any]:
+    result = _run([_tool_path("adb"), "-s", serial, "reboot", target])
+    audit("android_reboot", {"serial": serial, "target": target, "ok": result["ok"]})
+    return result
+
+def execute_approved_reboot(serial: str, target: str, approval_token: str) -> dict[str, Any]:
+    expected = _approval_payload(serial, "reboot", target)
+    identity = android_properties(serial)
+    if not identity.get("ok"):
+        raise ValueError(identity.get("error") or "The selected device is no longer available.")
+    _consume_approval(approval_token, expected)
+    audit("operation_started", expected)
+    result = _perform_reboot_android(serial, target)
+    audit("operation_completed" if result.get("ok") else "operation_failed",
+          {**expected, "returncode": result.get("returncode")})
+    return result
