@@ -32,7 +32,7 @@ document.querySelectorAll(".recovery-card").forEach(b=>b.onclick=async()=>{const
 
 document.querySelectorAll("[data-workflow]").forEach(b=>b.onclick=async()=>{
  const workflow=b.dataset.workflow;
- const labels={screen_lock:"SCREEN-LOCK RECOVERY",carrier_unlock:"SIM / NETWORK UNLOCK",bootloader_unlock:"OFFICIAL BOOTLOADER UNLOCK"};
+ const labels={frp_recovery:"FRP OWNER RECOVERY",screen_lock:"SCREEN-LOCK RECOVERY",carrier_unlock:"SIM / NETWORK UNLOCK",bootloader_unlock:"OFFICIAL BOOTLOADER UNLOCK"};
  $("workflowState").textContent=labels[workflow]||"RECOVERY WORKFLOW";
  output("workflowOutput","Loading official owner-recovery guidance…");
  try {
