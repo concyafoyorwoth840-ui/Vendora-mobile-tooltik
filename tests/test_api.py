@@ -131,3 +131,18 @@ def test_flash_execution_fails_closed_without_validated_engine():
         "approval_token": "not-a-real-token"
     })
     assert response.status_code == 409
+
+def test_media_backup_endpoint_uses_selected_device_and_destination(monkeypatch, tmp_path):
+    captured = {}
+    def fake_backup(serial, destination):
+        captured["serial"] = serial
+        captured["destination"] = destination
+        return {"ok": True, "operation": "accessible_shared_media_export"}
+    monkeypatch.setattr(api, "backup_accessible_media", fake_backup)
+    response = client.post("/api/android/media-backup", json={
+        "serial": "TEST123", "destination": str(tmp_path / "backup")
+    })
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    assert captured["serial"] == "TEST123"
+    assert captured["destination"] == str(tmp_path / "backup")
