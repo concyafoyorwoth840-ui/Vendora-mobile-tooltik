@@ -51,3 +51,7 @@ The workflow has been prepared but has not yet been executed on a Windows runner
 - **SIM/network unlock:** provides a carrier eligibility checklist and authorised request procedure. Carrier eligibility lookup and unlock-code generation require a supported carrier integration and are not implemented.
 - **Bootloader unlock:** provides OEM compatibility checks, consequences and official procedure guidance. There is no generic fastboot unlock command and no automated OEM unlock engine in this build.
 - Device-changing operations remain separately approval-gated. These three guidance workflows do not themselves issue device commands.
+
+
+## Boot Repair assessment (read-only)
+The Boot Repair workspace can assess a reported startup-logo freeze, boot loop, failed update, recovery-mode issue or black screen. It calls the local ADB/Fastboot discovery tools, reads Android properties/diagnostics when an authorised ADB session exists, and reads selected Fastboot getvar fields when a device is already in Fastboot. It does not reboot, unlock, erase, format or flash a device. When no supported protocol is detected it provides safe next-step guidance and reports the limitation. This is a real diagnostic and triage workflow, not a firmware repair engine. Manufacturer-specific Download Mode, EDL, Preloader and firmware flashing engines remain unimplemented and require separate device-family validation.
