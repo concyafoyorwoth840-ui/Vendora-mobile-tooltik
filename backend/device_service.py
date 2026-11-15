@@ -160,7 +160,12 @@ def backup_accessible_media(serial: str, destination: str) -> dict[str, Any]:
     state = _run([_tool_path("adb"), "-s", serial, "get-state"])
     if not state["ok"] or state.get("stdout", "").strip() != "device":
         raise ValueError("The selected device is not authorised and online in ADB. Unlock it and approve this computer.")
-    target.mkdir(parents=True, exist_ok=True)
+    try:
+        target.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        raise ValueError(f"Cannot create backup destination: {error}") from error
+    if not target.is_dir():
+        raise ValueError("The backup destination must be a folder.")
     folders = ("DCIM", "Pictures", "Movies", "Music", "Download")
     copied, skipped, failures = [], [], []
     for folder in folders:
