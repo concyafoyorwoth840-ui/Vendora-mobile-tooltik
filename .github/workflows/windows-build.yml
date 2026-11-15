@@ -44,7 +44,7 @@ jobs:
 
       - name: Package backend
         working-directory: backend
-        run: py -3 -m PyInstaller --noconfirm --clean --onefile --name VendoraBackend --hidden-import device_service --collect-all fastapi --collect-all uvicorn --collect-all pydantic app.py
+        run: py -3 -m PyInstaller --noconfirm --clean --onefile --name VendoraBackend --hidden-import device_service --hidden-import flashing --hidden-import repair_planner --collect-all fastapi --collect-all uvicorn --collect-all pydantic app.py
 
       - name: Verify packaged backend executable
         shell: pwsh
