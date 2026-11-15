@@ -145,6 +145,46 @@ def _parse_data_storage(output: str) -> dict[str, str]:
     return {}
 
 
+def backup_accessible_media(serial: str, destination: str) -> dict[str, Any]:
+    """Copy user-accessible shared media from an authorised Android device.
+    This is a logical media export, not deleted-file recovery or a full device image.
+    Only common shared-storage folders are copied.
+    """
+    if not _valid_serial(serial):
+        raise ValueError("A valid device serial is required.")
+    if not destination or len(destination) > 2048:
+        raise ValueError("Choose a valid destination folder on this computer.")
+    target = Path(destination).expanduser().resolve()
+    if target == Path(target.anchor):
+        raise ValueError("The drive root cannot be used as the backup destination.")
+    state = _run([_tool_path("adb"), "-s", serial, "get-state"])
+    if not state["ok"] or state.get("stdout", "").strip() != "device":
+        raise ValueError("The selected device is not authorised and online in ADB. Unlock it and approve this computer.")
+    target.mkdir(parents=True, exist_ok=True)
+    folders = ("DCIM", "Pictures", "Movies", "Music", "Download")
+    copied, skipped, failures = [], [], []
+    for folder in folders:
+        remote = "/sdcard/" + folder
+        exists = _run([_tool_path("adb"), "-s", serial, "shell", "test", "-d", remote], timeout=15)
+        if not exists["ok"]:
+            skipped.append(folder)
+            continue
+        local = target / folder
+        result = _run([_tool_path("adb"), "-s", serial, "pull", remote, str(local)], timeout=300)
+        if result["ok"]:
+            copied.append({"folder": folder, "destination": str(local), "output": result.get("stdout", "")})
+        else:
+            failures.append({"folder": folder, "error": result.get("stderr") or result.get("error") or "ADB pull failed"})
+    audit("accessible_media_export", {"serial": serial, "destination": str(target),
+          "copied_folders": [x["folder"] for x in copied], "skipped_folders": skipped,
+          "failed_folders": [x["folder"] for x in failures]})
+    return {"ok": bool(copied) and not failures, "operation": "accessible_shared_media_export",
+            "serial": serial, "destination": str(target), "copied": copied,
+            "skipped": skipped, "failures": failures,
+            "limitations": ["Copies only accessible shared-storage folders; it is not a full-device backup.",
+                "Does not recover deleted files, private app data, messages or protected content.",
+                "Keep the phone unlocked and do not disconnect it until the export finishes."]}
+
 def android_diagnostics(serial: str) -> dict[str, Any]:
     if not _valid_serial(serial): raise ValueError("Invalid device serial")
     commands = {"battery": [_tool_path("adb"), "-s", serial, "shell", "dumpsys", "battery"],
