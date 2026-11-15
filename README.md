@@ -13,6 +13,11 @@ Windows-first desktop toolkit for owner-authorised Android and Apple device disc
 - Flashing engine registry, capability report, flash-plan endpoint and fail-closed execution endpoint.
 - Automated Python tests and Windows x64 NSIS installer workflow.
 
+## Working Android media export
+The System Repair workspace includes an ADB-based **Shared media backup** operation. With an authorised, online Android ADB session, it copies accessible shared-storage folders (DCIM, Pictures, Movies, Music and Download) to a user-selected folder on the Windows PC. The export is initiated by the operator and audited. It does not access private app sandboxes, protected system partitions, messages or deleted files, and it is not a full-device image or a promise of data recovery.
+
+USB inventory also classifies known interface candidates (including Qualcomm 9008, possible MediaTek preloader/BootROM and Samsung Download Mode candidates) conservatively. A USB vendor/product ID is not proof of the exact phone model or a working manufacturer service session.
+
 ## Recovery workflow scope
 These are guided owner-recovery workflows, not universal automated unlock engines.
 - **FRP:** ownership-verification checklist, previously synced Google Account recovery guidance and authorised manufacturer/service-centre referral. Vendora does not bypass or disable FRP and never collects account passwords or verification codes.
