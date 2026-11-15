@@ -245,10 +245,18 @@ def windows_usb_inventory() -> dict[str, Any]:
     except json.JSONDecodeError: return {"supported": True, "devices": [], "message": "Windows returned an unreadable device inventory."}
 
 def readiness_report() -> dict[str, Any]:
-    names = ("adb", "fastboot", "python", "powershell")
-    return {"tools": {n: {"available": bool(shutil.which(n)), "path": shutil.which(n)} for n in names},
+    # Report the exact executable actually used by discovery, including installer-bundled tools.
+    adb_path, fastboot_path = _tool_path("adb"), _tool_path("fastboot")
+    names = ("python", "powershell")
+    tools = {
+        "adb": {"available": tool_status()["adb"], "path": adb_path if tool_status()["adb"] else None, "source": "bundled_or_path"},
+        "fastboot": {"available": tool_status()["fastboot"], "path": fastboot_path if tool_status()["fastboot"] else None, "source": "bundled_or_path"},
+    }
+    tools.update({n: {"available": bool(shutil.which(n)), "path": shutil.which(n)} for n in names})
+    return {"tools": tools,
         "platform": os.name, "manufacturer_profiles": MANUFACTURER_PROTOCOLS,
         "iphone_library_installed": iphone_status()["supported_library_installed"],
         "limitations": ["Protocol profiles are readiness records, not implemented flashing or repair engines.",
         "No firmware is selected or flashed automatically.", "No screen-lock, FRP, Activation Lock, or account bypass is provided.",
+        "USB presence alone does not mean ADB authorisation is complete; enable USB debugging and approve this computer on the phone.",
         "Physical-device validation is required before claiming model compatibility."]}
