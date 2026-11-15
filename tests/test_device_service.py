@@ -394,3 +394,23 @@ def test_media_restore_pushes_only_supported_existing_folders(monkeypatch, tmp_p
 def test_media_restore_rejects_empty_or_invalid_backup_folder(tmp_path):
     with pytest.raises(ValueError, match="no supported Vendora media folders"):
         ds.restore_accessible_media("PHONE_A", str(tmp_path))
+
+
+def test_boot_repair_fastboot_collects_extended_read_only_identity(monkeypatch):
+    commands = []
+    monkeypatch.setattr(ds, "discover_android", lambda: {
+        "adb": [], "fastboot": [{"serial": "FASTBOOT123"}], "warnings": []
+    })
+    def fake_run(command, timeout=12):
+        commands.append(command)
+        key = command[-1]
+        values = {"product": "p3q", "variant": "SM-G998W", "current-slot": "a",
+                  "unlocked": "no", "secure": "yes"}
+        return {"ok": True, "stdout": "", "stderr": "(bootloader) " + values.get(key, "unknown variable")}
+    monkeypatch.setattr(ds, "_run", fake_run)
+    report = ds.assess_boot_repair("FASTBOOT123", "failed_update")
+    assert report["device_mode"] == "fastboot"
+    assert report["identity"]["product"] == "(bootloader) p3q"
+    assert report["identity"]["variant"] == "(bootloader) SM-G998W"
+    assert report["identity"]["write_commands_sent"] is False
+    assert all("getvar" in command for command in commands)
