@@ -1,0 +1,145 @@
+from __future__ import annotations
+import hashlib, json, os, re, shutil, subprocess, zipfile
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+AUDIT_PATH = Path(os.environ.get("VENDORA_AUDIT_PATH", Path.home() / ".vendora_mobile_toolkit" / "audit.jsonl"))
+SAFE_REBOOT_TARGETS = {"system", "recovery", "bootloader"}
+MANUFACTURER_PROTOCOLS = {
+    "samsung": {"families": ["Download Mode / Odin-compatible workflows"], "tooling": ["Samsung USB driver", "Odin-compatible service workflow"], "status": "framework_only"},
+    "google": {"families": ["ADB", "Fastboot"], "tooling": ["Android Platform Tools"], "status": "partial_detection"},
+    "qualcomm": {"families": ["EDL (9008)"], "tooling": ["Exact chipset/firehose programmer", "signed vendor package"], "status": "not_implemented"},
+    "mediatek": {"families": ["Preloader / BootROM"], "tooling": ["Exact chipset scatter/package", "vendor-authorized DA"], "status": "not_implemented"},
+    "apple": {"families": ["Recovery", "DFU"], "tooling": ["Apple Devices / iTunes components", "pymobiledevice3 (optional)"], "status": "discovery_experimental"},
+    "generic_android": {"families": ["ADB", "Fastboot"], "tooling": ["Android Platform Tools"], "status": "partial_detection"},
+}
+
+def _run(command: list[str], timeout: int = 12) -> dict[str, Any]:
+    try:
+        p = subprocess.run(command, capture_output=True, text=True, timeout=timeout, check=False)
+        return {"ok": p.returncode == 0, "returncode": p.returncode, "stdout": p.stdout.strip(), "stderr": p.stderr.strip()}
+    except FileNotFoundError:
+        return {"ok": False, "error": f"{command[0]} was not found on PATH"}
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": "Command timed out"}
+
+def audit(action: str, details: dict[str, Any]) -> None:
+    AUDIT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with AUDIT_PATH.open("a", encoding="utf-8") as f:
+        f.write(json.dumps({"at": datetime.now(timezone.utc).isoformat(), "action": action, "details": details}) + "\n")
+
+def tool_status() -> dict[str, bool]:
+    return {name: shutil.which(name) is not None for name in ("adb", "fastboot")}
+
+def _parse_adb_devices(output: str) -> list[dict[str, str]]:
+    devices = []
+    for line in output.splitlines()[1:]:
+        parts = line.split()
+        if len(parts) >= 2 and parts[1] in {"device", "unauthorized", "offline", "recovery", "sideload"}:
+            devices.append({"serial": parts[0], "state": parts[1]})
+    return devices
+
+def _parse_fastboot_devices(output: str) -> list[dict[str, str]]:
+    devices = []
+    for line in output.splitlines():
+        if "\t" in line:
+            serial, state = line.split("\t", 1)
+            if serial.strip(): devices.append({"serial": serial.strip(), "state": state.strip() or "fastboot"})
+    return devices
+
+def discover_android() -> dict[str, Any]:
+    adb, fastboot = _run(["adb", "devices"]), _run(["fastboot", "devices"])
+    return {"adb_available": tool_status()["adb"], "fastboot_available": tool_status()["fastboot"],
+        "adb": _parse_adb_devices(adb.get("stdout", "")) if adb["ok"] else [],
+        "fastboot": _parse_fastboot_devices(fastboot.get("stdout", "")) if fastboot["ok"] else [],
+        "warnings": [x for x in (adb.get("error"), fastboot.get("error")) if x]}
+
+def _valid_serial(serial: str) -> bool:
+    return bool(serial and len(serial) <= 128 and re.fullmatch(r"[A-Za-z0-9._:-]+", serial))
+
+def android_properties(serial: str) -> dict[str, Any]:
+    if not _valid_serial(serial): raise ValueError("Invalid device serial")
+    result = _run(["adb", "-s", serial, "shell", "getprop"])
+    if not result["ok"]: return result
+    props = {}
+    for line in result["stdout"].splitlines():
+        m = re.match(r"\[([^]]+)\]: \[(.*)\]", line)
+        if m: props[m.group(1)] = m.group(2)
+    keys = ("ro.product.manufacturer", "ro.product.model", "ro.product.device", "ro.build.version.release",
+        "ro.build.version.sdk", "ro.build.fingerprint", "ro.boot.verifiedbootstate", "ro.boot.flash.locked")
+    return {"ok": True, "serial": serial, "properties": {k: props.get(k, "") for k in keys}}
+
+def classify_android(manufacturer: str = "", model: str = "", device: str = "", fingerprint: str = "") -> dict[str, Any]:
+    text = " ".join((manufacturer, model, device, fingerprint)).lower()
+    if "samsung" in text or re.search(r"\b(sm-[a-z0-9]+|samsung)\b", text): key, label = "samsung", "Samsung"
+    elif "google" in text or "pixel" in text: key, label = "google", "Google Pixel"
+    elif any(x in text for x in ("qualcomm", "qcom", "snapdragon")): key, label = "qualcomm", "Qualcomm-based Android (unconfirmed manufacturer)"
+    elif any(x in text for x in ("mediatek", "mtk", "mt67", "mt68", "dimensity", "helio")): key, label = "mediatek", "MediaTek-based Android (unconfirmed manufacturer)"
+    elif any(x in text for x in ("xiaomi", "redmi", "poco")): key, label = "generic_android", "Xiaomi / Redmi / POCO"
+    else: key, label = "generic_android", manufacturer.strip() or "Unknown Android manufacturer"
+    return {"manufacturer_family": label, "protocol_profile": key, "protocols": MANUFACTURER_PROTOCOLS[key],
+        "identification_confidence": "reported_properties" if text else "unknown"}
+
+def android_diagnostics(serial: str) -> dict[str, Any]:
+    if not _valid_serial(serial): raise ValueError("Invalid device serial")
+    commands = {"battery": ["adb", "-s", serial, "shell", "dumpsys", "battery"],
+        "storage": ["adb", "-s", serial, "shell", "df", "-h", "/data"], "uptime": ["adb", "-s", serial, "shell", "uptime"]}
+    results = {name: _run(cmd) for name, cmd in commands.items()}
+    audit("android_diagnostics", {"serial": serial})
+    return {"serial": serial, "checks": results}
+
+def reboot_android(serial: str, target: str) -> dict[str, Any]:
+    if target not in SAFE_REBOOT_TARGETS: raise ValueError("Unsupported reboot target")
+    if not _valid_serial(serial): raise ValueError("Invalid device serial")
+    result = _run(["adb", "-s", serial, "reboot", target])
+    audit("android_reboot", {"serial": serial, "target": target, "ok": result["ok"]})
+    return result
+
+def inspect_firmware_zip(path: str) -> dict[str, Any]:
+    p = Path(path).expanduser()
+    if not p.is_file() or p.suffix.lower() != ".zip": raise ValueError("Select an existing .zip firmware/archive file")
+    if p.stat().st_size > 8 * 1024**3: raise ValueError("Archive exceeds the 8 GB inspection limit")
+    digest = hashlib.sha256()
+    with p.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""): digest.update(chunk)
+    try:
+        with zipfile.ZipFile(p) as z:
+            bad, names = z.testzip(), z.namelist()
+            manifests = [n for n in names if Path(n).name.lower() in {"android-info.txt", "metadata", "manifest.xml", "payload_properties.txt", "scatter.txt", "flash-all.bat"}]
+            return {"ok": bad is None, "file": p.name, "size_bytes": p.stat().st_size, "sha256": digest.hexdigest(),
+                "entries": len(names), "integrity_error": bad, "possible_manifests": manifests[:30],
+                "note": "Archive inspection only; compatibility and authenticity are not verified."}
+    except zipfile.BadZipFile: raise ValueError("The selected file is not a valid ZIP archive")
+
+def iphone_status() -> dict[str, Any]:
+    try:
+        import pymobiledevice3  # noqa: F401
+        installed = True
+    except Exception: installed = False
+    return {"supported_library_installed": installed, "message": "Optional iPhone tooling is installed; device discovery is not yet implemented." if installed else "Install pymobiledevice3 to enable future iPhone integration."}
+
+def recovery_guidance(platform: str) -> list[str]:
+    if platform == "android": return ["Confirm the owner can unlock the device and has backed up important data.", "Record the exact manufacturer, model number, region and build before choosing firmware.", "Try the manufacturer's documented restart and recovery procedure first.", "Use only signed firmware intended for the exact model and region.", "If Factory Reset Protection appears, recover the previously synced Google account; do not bypass it."]
+    if platform == "ios": return ["Confirm ownership and check that a current backup exists.", "Use Apple's official recovery-mode update/restore instructions for the exact device.", "A restore can erase data; explain this before proceeding.", "Activation Lock requires the linked Apple Account or Apple's ownership-support process."]
+    raise ValueError("Unknown platform")
+
+def windows_usb_inventory() -> dict[str, Any]:
+    if os.name != "nt": return {"supported": False, "devices": [], "message": "Windows USB inventory is available only on Windows."}
+    script = "Get-PnpDevice -PresentOnly | Where-Object { $_.InstanceId -like 'USB*' } | Select-Object Status,Class,FriendlyName,InstanceId | ConvertTo-Json -Compress"
+    result = _run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], timeout=20)
+    if not result["ok"]: return {"supported": True, "devices": [], "message": result.get("stderr") or result.get("error") or "Unable to query Windows devices."}
+    try:
+        data = json.loads(result["stdout"] or "[]")
+        if isinstance(data, dict): data = [data]
+        return {"supported": True, "devices": data, "count": len(data)}
+    except json.JSONDecodeError: return {"supported": True, "devices": [], "message": "Windows returned an unreadable device inventory."}
+
+def readiness_report() -> dict[str, Any]:
+    names = ("adb", "fastboot", "python", "powershell")
+    return {"tools": {n: {"available": bool(shutil.which(n)), "path": shutil.which(n)} for n in names},
+        "platform": os.name, "manufacturer_profiles": MANUFACTURER_PROTOCOLS,
+        "iphone_library_installed": iphone_status()["supported_library_installed"],
+        "limitations": ["Protocol profiles are readiness records, not implemented flashing or repair engines.",
+        "No firmware is selected or flashed automatically.", "No screen-lock, FRP, Activation Lock, or account bypass is provided.",
+        "Physical-device validation is required before claiming model compatibility."]}
