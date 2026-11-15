@@ -323,3 +323,29 @@ def test_accessible_media_export_requires_authorised_adb(monkeypatch, tmp_path):
     })
     with pytest.raises(ValueError, match="not authorised"):
         ds.backup_accessible_media("TEST123", str(tmp_path / "backup"))
+
+
+def test_phone_transfer_requires_two_distinct_authorised_devices(monkeypatch):
+    calls = []
+    def fake_run(command, timeout=12):
+        calls.append(command)
+        return {"ok": True, "stdout": "device", "stderr": ""}
+    monkeypatch.setattr(ds, "_run", fake_run)
+    monkeypatch.setattr(ds, "audit", lambda *args, **kwargs: None)
+    result = ds.transfer_shared_media("PHONE_A", "PHONE_B")
+    assert result["operation"] == "shared_media_phone_to_phone_transfer"
+    assert result["ok"] is False
+    assert len(calls) == 2
+    with pytest.raises(ValueError, match="different phones"):
+        ds.transfer_shared_media("PHONE_A", "PHONE_A")
+
+
+def test_phone_transfer_stops_before_copy_if_destination_not_authorised(monkeypatch):
+    calls = []
+    def fake_run(command, timeout=12):
+        calls.append(command)
+        return {"ok": True, "stdout": "device" if "-s" in command and "PHONE_A" in command else "unauthorized", "stderr": ""}
+    monkeypatch.setattr(ds, "_run", fake_run)
+    with pytest.raises(ValueError, match="destination phone"):
+        ds.transfer_shared_media("PHONE_A", "PHONE_B")
+    assert len(calls) == 2
