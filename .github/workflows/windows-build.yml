@@ -27,6 +27,18 @@ jobs:
           node --check desktop/electron.cjs
           node --check desktop/src/main.js
 
+      - name: Download official Android Platform Tools
+        shell: pwsh
+        run: |
+          $toolsDir = "backend/vendor/platform-tools"
+          New-Item -ItemType Directory -Force -Path $toolsDir | Out-Null
+          Invoke-WebRequest -Uri "https://dl.google.com/android/repository/platform-tools-latest-windows.zip" -OutFile "$env:RUNNER_TEMP/platform-tools.zip"
+          Expand-Archive -Path "$env:RUNNER_TEMP/platform-tools.zip" -DestinationPath "$env:RUNNER_TEMP/platform-tools" -Force
+          Copy-Item "$env:RUNNER_TEMP/platform-tools/platform-tools/*" -Destination $toolsDir -Recurse -Force
+          if (!(Test-Path "$toolsDir/adb.exe") -or !(Test-Path "$toolsDir/fastboot.exe")) {
+            throw "Official Android Platform Tools did not extract correctly."
+          }
+
       - name: Package backend
         working-directory: backend
         run: py -3 -m PyInstaller --noconfirm --clean --onefile --name VendoraBackend --hidden-import device_service --collect-all fastapi --collect-all uvicorn --collect-all pydantic app.py
