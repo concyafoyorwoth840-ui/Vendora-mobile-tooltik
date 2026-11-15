@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 from device_service import (tool_status, discover_android, android_properties,
     android_diagnostics, reboot_android, inspect_firmware_zip, iphone_status,
     recovery_guidance, unlock_workflow_guidance, classify_android, windows_usb_inventory, readiness_report, prepare_factory_reset,
-    create_operation_preview, approve_operation)
+    create_operation_preview, approve_operation, assess_boot_repair)
 
 app = FastAPI(title="Vendora Mobile Toolkit API", version="0.6.0")
 
@@ -30,6 +30,16 @@ class OperationPreviewRequest(DeviceRequest):
 
 class OperationApprovalRequest(BaseModel):
     challenge_id: str = Field(min_length=1, max_length=128)
+
+
+class BootRepairAssessmentRequest(BaseModel):
+    serial: str = Field(default="", max_length=128)
+    symptom: str = Field(default="stuck_logo", max_length=32)
+
+@app.post("/api/boot-repair/assess")
+def boot_repair_assess(req: BootRepairAssessmentRequest):
+    try: return assess_boot_repair(req.serial, req.symptom)
+    except ValueError as e: raise HTTPException(400, str(e))
 
 @app.get("/api/health")
 def health():
