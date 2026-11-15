@@ -36,6 +36,10 @@
       {
         "from": "../backend/dist/VendoraBackend.exe",
         "to": "backend/VendoraBackend.exe"
+      },
+      {
+        "from": "../backend/vendor/platform-tools",
+        "to": "platform-tools"
       }
     ],
     "win": {
