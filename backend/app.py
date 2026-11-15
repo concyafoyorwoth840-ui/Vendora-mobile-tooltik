@@ -5,6 +5,7 @@ from device_service import (tool_status, discover_android, android_properties,
     recovery_guidance, unlock_workflow_guidance, classify_android, windows_usb_inventory, readiness_report, prepare_factory_reset,
     create_operation_preview, approve_operation, assess_boot_repair)
 from repair_planner import build_repair_plan
+from flashing import flash_capabilities, prepare_flash_plan, execute_flash
 
 app = FastAPI(title="Vendora Mobile Toolkit API", version="0.6.0")
 
@@ -17,6 +18,16 @@ class RebootRequest(DeviceRequest):
 
 class FirmwareRequest(BaseModel):
     path: str = Field(min_length=1, max_length=2048)
+
+class FlashPlanRequest(DeviceRequest):
+    firmware_path: str = Field(min_length=1, max_length=2048)
+    engine_id: str = Field(min_length=1, max_length=64)
+
+class FlashExecuteRequest(DeviceRequest):
+    package_sha256: str = Field(min_length=64, max_length=64)
+    engine_id: str = Field(min_length=1, max_length=64)
+    partition_plan_sha256: str = Field(min_length=64, max_length=64)
+    approval_token: str = Field(min_length=1, max_length=256)
 
 class FactoryResetPrepareRequest(DeviceRequest):
     backup_confirmed: bool
@@ -132,10 +143,21 @@ def recovery(platform: str):
     try: return {"platform": platform, "steps": recovery_guidance(platform)}
     except ValueError as e: raise HTTPException(400, str(e))
 
+@app.get("/api/firmware/flash/capabilities")
+def firmware_flash_capabilities():
+    return flash_capabilities()
+
+@app.post("/api/firmware/flash/plan")
+def firmware_flash_plan(req: FlashPlanRequest):
+    try: return prepare_flash_plan(req.serial, req.firmware_path, req.engine_id)
+    except ValueError as e: raise HTTPException(400, str(e))
+
 @app.post("/api/firmware/flash")
-def firmware_flash_unavailable():
-    # Fail closed until an OEM-specific, validated flashing engine exists.
-    raise HTTPException(501, "Firmware flashing is not implemented for this device family. No device command was executed.")
+def firmware_flash(req: FlashExecuteRequest):
+    try:
+        return execute_flash(req.serial, req.package_sha256, req.engine_id,
+                             req.partition_plan_sha256, req.approval_token)
+    except ValueError as e: raise HTTPException(409, str(e))
 
 if __name__ == "__main__":
     import uvicorn
