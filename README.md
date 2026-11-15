@@ -9,13 +9,13 @@ Windows-first desktop service toolkit for owner-authorised Android and Apple dev
 - Manufacturer readiness catalogue for Samsung, Google, Qualcomm, MediaTek, Apple and generic Android.
 - Conservative Android family classification from reported device properties.
 - Read-only Windows USB Plug-and-Play inventory endpoint.
-- Desktop readiness panel and automated tests.
+- Desktop readiness panel and automated tests.\n- UI actions for owner-confirmed Android reboot to system, recovery or bootloader.\n- UI access to iPhone tooling status and read-only Windows USB inventory.
 - Windows x64 NSIS installer build configuration and GitHub Actions workflow.
 
 ## Status and limitations
 Manufacturer protocol profiles are readiness records, not completed vendor flashing engines. Qualcomm EDL and MediaTek BootROM/Preloader servicing are not implemented. Samsung Download Mode servicing is not implemented. Apple discovery remains experimental. No firmware is automatically selected or flashed. No screen-lock, FRP, Activation Lock, account or bootloader bypass is provided. Physical-device validation is outstanding; unknown models must remain unverified.
 
-## API additions
+## Current desktop actions\nThe desktop interface now exposes the safe Android reboot endpoint with an explicit confirmation, plus iPhone tooling-status and Windows USB-inventory checks. The iPhone endpoint currently reports optional library availability only; it does not discover or service iPhones.\n\n## API additions
 - GET /api/readiness — tool availability, protocol profiles and limitations.
 - GET /api/devices/usb — read-only Windows USB PnP inventory.
 - POST /api/android/classify — classify a connected Android device from its reported properties.
