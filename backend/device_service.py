@@ -1,5 +1,5 @@
 from __future__ import annotations
-import hashlib, json, os, re, shutil, subprocess, zipfile, secrets, threading, time, secrets, threading, time
+import hashlib, json, os, re, shutil, subprocess, zipfile, secrets, threading, time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -256,6 +256,9 @@ def readiness_report() -> dict[str, Any]:
     return {"tools": tools,
         "platform": os.name, "manufacturer_profiles": MANUFACTURER_PROTOCOLS,
         "iphone_library_installed": iphone_status()["supported_library_installed"],
+        "operation_approval": {"backend_enforced": True, "single_use": True, "expires_in_seconds": _APPROVAL_TTL_SECONDS,
+            "supported_operations": ["android_reboot", "factory_recovery_preparation"]},
+        "firmware_flashing": {"available": False, "status": "not_implemented", "execution_endpoint": "disabled"},
         "limitations": ["Protocol profiles are readiness records, not implemented flashing or repair engines.",
         "Firmware flashing engines are not implemented; ZIP inspection is not a flash operation.", "Factory reset support is guided recovery preparation only; Vendora does not issue wipe commands.", "No screen-lock, FRP, Activation Lock, or account bypass is provided.",
         "USB presence alone does not mean ADB authorisation is complete; enable USB debugging and approve this computer on the phone.",
@@ -312,8 +315,14 @@ def create_operation_preview(serial: str, operation: str, target: str = "",
     if not identity.get("ok"):
         raise ValueError(identity.get("error") or "The selected device could not be verified.")
     challenge = secrets.token_urlsafe(24)
+    now = time.monotonic()
     with _APPROVAL_LOCK:
-        _PENDING_CHALLENGES[challenge] = {"payload": payload, "expires": time.monotonic() + _APPROVAL_TTL_SECONDS}
+        # Bound memory use if a user repeatedly opens and cancels approval dialogs.
+        for key in [k for k, v in _PENDING_CHALLENGES.items() if v["expires"] < now]:
+            _PENDING_CHALLENGES.pop(key, None)
+        for key in [k for k, v in _APPROVED_TOKENS.items() if v["expires"] < now]:
+            _APPROVED_TOKENS.pop(key, None)
+        _PENDING_CHALLENGES[challenge] = {"payload": payload, "expires": now + _APPROVAL_TTL_SECONDS}
     audit("operation_approval_requested", {"serial": serial, "operation": operation, "target": payload["target"]})
     return {"ok": True, "challenge_id": challenge, "expires_in_seconds": _APPROVAL_TTL_SECONDS,
             "operation": payload, "device": identity.get("properties", {})}
