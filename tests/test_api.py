@@ -103,3 +103,31 @@ def test_automatic_repair_preparation_endpoint_is_read_only(monkeypatch):
     assert response.status_code == 200
     assert response.json()["read_only"] is True
     assert response.json()["execution_enabled"] is False
+
+
+def test_flash_capabilities_are_fail_closed():
+    response = client.get("/api/firmware/flash/capabilities")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["approval_required"] is True
+    assert body["global_write_enabled"] is False
+    assert all(not engine["write_enabled"] for engine in body["engines"].values())
+
+
+def test_flash_plan_does_not_enable_unvalidated_engine():
+    response = client.post("/api/firmware/flash/plan", json={
+        "serial": "TEST123", "firmware_path": "C:/not-used.zip",
+        "engine_id": "samsung_download"
+    })
+    assert response.status_code == 200
+    assert response.json()["flash_enabled"] is False
+    assert response.json()["plan_id"] == ""
+
+
+def test_flash_execution_fails_closed_without_validated_engine():
+    response = client.post("/api/firmware/flash", json={
+        "serial": "TEST123", "package_sha256": "a" * 64,
+        "engine_id": "samsung_download", "partition_plan_sha256": "b" * 64,
+        "approval_token": "not-a-real-token"
+    })
+    assert response.status_code == 409
