@@ -21,7 +21,7 @@ Manufacturer protocol profiles are readiness records, not completed vendor flash
 - POST /api/android/classify — classify a connected Android device from its reported properties.
 
 ## Tests
-Run from the project root: `python -m pytest -q`.
+Install development/test dependencies from the project root with `python -m pip install -r backend/requirements-dev.txt`, then run `python -m pytest -q`. The runtime requirements exclude test-only packages.
 
 ## Reliability, packaging and source protection
 - Desktop startup waits for the local backend health check and records diagnostic logs under the user's application data folder.
