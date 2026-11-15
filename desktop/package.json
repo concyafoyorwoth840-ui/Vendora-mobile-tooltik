@@ -4,15 +4,56 @@
   "private": true,
   "description": "Vendora Digitals mobile device diagnostics and recovery toolkit",
   "main": "electron.cjs",
-  "scripts": {"start": "electron .", "dist:win": "electron-builder --win nsis x64"},
-  "devDependencies": {"electron": "^33.0.0", "electron-builder": "^25.1.8"},
+  "scripts": {
+    "start": "electron .",
+    "prepare:release": "node build.cjs",
+    "dist:win": "npm run prepare:release && electron-builder --win nsis x64"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8",
+    "terser": "^5.36.0"
+  },
   "build": {
     "appId": "com.vendoradigitals.mobiletoolkit",
     "productName": "Vendora Mobile Toolkit",
-    "directories": {"output": "release"},
-    "files": ["index.html", "electron.cjs", "src/**/*", "package.json"],
-    "extraResources": [{"from": "../backend/dist/VendoraBackend.exe", "to": "backend/VendoraBackend.exe"}],
-    "win": {"target": [{"target": "nsis", "arch": ["x64"]}], "artifactName": "Vendora-Mobile-Toolkit-Setup-${version}.${ext}"},
-    "nsis": {"oneClick": false, "allowToChangeInstallationDirectory": true, "createDesktopShortcut": true, "createStartMenuShortcut": true}
+    "directories": {
+      "output": "release"
+    },
+    "asar": true,
+    "compression": "maximum",
+    "files": [
+      "index.html",
+      "electron.cjs",
+      "build/main.min.js",
+      "src/style.css",
+      "package.json",
+      "!**/*.map",
+      "!**/tests/**",
+      "!**/*.md"
+    ],
+    "extraResources": [
+      {
+        "from": "../backend/dist/VendoraBackend.exe",
+        "to": "backend/VendoraBackend.exe"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "Vendora-Mobile-Toolkit-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
   }
 }
