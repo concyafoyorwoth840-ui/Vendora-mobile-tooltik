@@ -372,3 +372,25 @@ def test_phone_transfer_pulls_then_pushes_each_available_shared_folder(monkeypat
     assert any("pull" in command for command in commands)
     assert any("push" in command for command in commands)
     assert result["destination_folder"].startswith("/sdcard/Vendora_Transfer_")
+
+
+def test_media_restore_pushes_only_supported_existing_folders(monkeypatch, tmp_path):
+    (tmp_path / "Pictures").mkdir()
+    (tmp_path / "Pictures" / "photo.jpg").write_bytes(b"image")
+    (tmp_path / "notes.txt").write_text("not a supported media folder")
+    commands = []
+    def fake_run(command, timeout=12):
+        commands.append(command)
+        return {"ok": True, "stdout": "device" if "get-state" in command else "ok", "stderr": ""}
+    monkeypatch.setattr(ds, "_run", fake_run)
+    monkeypatch.setattr(ds, "audit", lambda *args, **kwargs: None)
+    result = ds.restore_accessible_media("PHONE_A", str(tmp_path))
+    assert result["ok"] is True
+    assert [x["folder"] for x in result["restored"]] == ["Pictures"]
+    assert any("push" in command for command in commands)
+    assert result["destination_folder"].startswith("/sdcard/Vendora_Restore_")
+
+
+def test_media_restore_rejects_empty_or_invalid_backup_folder(tmp_path):
+    with pytest.raises(ValueError, match="no supported Vendora media folders"):
+        ds.restore_accessible_media("PHONE_A", str(tmp_path))
