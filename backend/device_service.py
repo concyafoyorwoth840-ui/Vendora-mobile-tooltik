@@ -81,13 +81,49 @@ def classify_android(manufacturer: str = "", model: str = "", device: str = "", 
     return {"manufacturer_family": label, "protocol_profile": key, "protocols": MANUFACTURER_PROTOCOLS[key],
         "identification_confidence": "reported_properties" if text else "unknown"}
 
+def _parse_battery_diagnostics(output: str) -> dict[str, Any]:
+    values: dict[str, str] = {}
+    for line in output.splitlines():
+        match = re.match(r"\s*([A-Za-z ]+):\s*(-?\d+)\s*$", line)
+        if match:
+            values[match.group(1).strip().lower().replace(" ", "_")] = match.group(2)
+    status_names = {1: "unknown", 2: "charging", 3: "discharging", 4: "not_charging", 5: "full"}
+    health_names = {1: "unknown", 2: "good", 3: "overheat", 4: "dead", 5: "over_voltage", 6: "unspecified_failure", 7: "cold"}
+    parsed: dict[str, Any] = {}
+    for source, target in (("level", "level_percent"), ("status", "status_code"), ("health", "health_code"), ("temperature", "temperature_tenths_c"), ("voltage", "voltage_mv"), ("plugged", "plugged_code")):
+        if source in values:
+            parsed[target] = int(values[source])
+    if "status_code" in parsed:
+        parsed["status"] = status_names.get(parsed["status_code"], "unrecognised")
+    if "health_code" in parsed:
+        parsed["health"] = health_names.get(parsed["health_code"], "unrecognised")
+    if "temperature_tenths_c" in parsed:
+        parsed["temperature_c"] = round(parsed["temperature_tenths_c"] / 10, 1)
+    return parsed
+
+
+def _parse_data_storage(output: str) -> dict[str, str]:
+    lines = [line.split() for line in output.splitlines() if line.strip()]
+    for parts in reversed(lines):
+        if len(parts) >= 6 and parts[-1] == "/data":
+            return {"filesystem": parts[0], "size": parts[1], "used": parts[2], "available": parts[3], "use_percent": parts[4], "mount": parts[5]}
+    return {}
+
+
 def android_diagnostics(serial: str) -> dict[str, Any]:
     if not _valid_serial(serial): raise ValueError("Invalid device serial")
     commands = {"battery": ["adb", "-s", serial, "shell", "dumpsys", "battery"],
         "storage": ["adb", "-s", serial, "shell", "df", "-h", "/data"], "uptime": ["adb", "-s", serial, "shell", "uptime"]}
     results = {name: _run(cmd) for name, cmd in commands.items()}
+    summary: dict[str, Any] = {}
+    if results["battery"]["ok"]:
+        summary["battery"] = _parse_battery_diagnostics(results["battery"].get("stdout", ""))
+    if results["storage"]["ok"]:
+        summary["data_storage"] = _parse_data_storage(results["storage"].get("stdout", ""))
+    if results["uptime"]["ok"]:
+        summary["uptime"] = results["uptime"].get("stdout", "")
     audit("android_diagnostics", {"serial": serial})
-    return {"serial": serial, "checks": results}
+    return {"serial": serial, "summary": summary, "checks": results}
 
 def reboot_android(serial: str, target: str) -> dict[str, Any]:
     if target not in SAFE_REBOOT_TARGETS: raise ValueError("Unsupported reboot target")
