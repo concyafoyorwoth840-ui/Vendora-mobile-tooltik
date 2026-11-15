@@ -2,7 +2,8 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from device_service import (tool_status, discover_android, android_properties,
     android_diagnostics, reboot_android, inspect_firmware_zip, iphone_status,
-    recovery_guidance, classify_android, windows_usb_inventory, readiness_report, prepare_factory_reset)
+    recovery_guidance, classify_android, windows_usb_inventory, readiness_report, prepare_factory_reset,
+    create_operation_preview, approve_operation)
 
 app = FastAPI(title="Vendora Mobile Toolkit API", version="0.5.0")
 
@@ -11,6 +12,7 @@ class DeviceRequest(BaseModel):
 
 class RebootRequest(DeviceRequest):
     target: str
+    approval_token: str = Field(min_length=1, max_length=256)
 
 class FirmwareRequest(BaseModel):
     path: str = Field(min_length=1, max_length=2048)
@@ -18,6 +20,16 @@ class FirmwareRequest(BaseModel):
 class FactoryResetPrepareRequest(DeviceRequest):
     backup_confirmed: bool
     confirmation: str = Field(min_length=1, max_length=64)
+    approval_token: str = Field(min_length=1, max_length=256)
+
+class OperationPreviewRequest(DeviceRequest):
+    operation: str
+    target: str = ""
+    backup_confirmed: bool = False
+    confirmation: str = ""
+
+class OperationApprovalRequest(BaseModel):
+    challenge_id: str = Field(min_length=1, max_length=128)
 
 @app.get("/api/health")
 def health():
@@ -59,15 +71,28 @@ def diagnostics(req: DeviceRequest):
     try: return android_diagnostics(req.serial)
     except ValueError as e: raise HTTPException(400, str(e))
 
+@app.post("/api/operations/preview")
+def operation_preview(req: OperationPreviewRequest):
+    try:
+        return create_operation_preview(req.serial, req.operation, req.target,
+            req.backup_confirmed, req.confirmation)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+@app.post("/api/operations/approve")
+def operation_approve(req: OperationApprovalRequest):
+    try: return approve_operation(req.challenge_id)
+    except ValueError as e: raise HTTPException(400, str(e))
+
 @app.post("/api/android/reboot")
 def reboot(req: RebootRequest):
-    try: return reboot_android(req.serial, req.target)
+    try: return reboot_android(req.serial, req.target, req.approval_token)
     except ValueError as e: raise HTTPException(400, str(e))
 
 @app.post("/api/android/factory-reset/prepare")
 def factory_reset_prepare(req: FactoryResetPrepareRequest):
     try:
-        return prepare_factory_reset(req.serial, req.backup_confirmed, req.confirmation)
+        return prepare_factory_reset(req.serial, req.backup_confirmed, req.confirmation, req.approval_token)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -84,3 +109,8 @@ def recovery(platform: str):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8765)
+
+@app.post("/api/firmware/flash")
+def firmware_flash_unavailable():
+    # Fail closed until an OEM-specific, validated flashing engine exists.
+    raise HTTPException(501, "Firmware flashing is not implemented for this device family. No device command was executed.")
