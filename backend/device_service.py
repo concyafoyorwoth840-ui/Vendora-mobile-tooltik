@@ -260,7 +260,7 @@ def readiness_report() -> dict[str, Any]:
         "platform": os.name, "manufacturer_profiles": MANUFACTURER_PROTOCOLS,
         "iphone_library_installed": iphone_status()["supported_library_installed"],
         "limitations": ["Protocol profiles are readiness records, not implemented flashing or repair engines.",
-        "No firmware is selected or flashed automatically.", "No screen-lock, FRP, Activation Lock, or account bypass is provided.",
+        "Firmware flashing engines are not implemented; ZIP inspection is not a flash operation.", "Factory reset support is guided recovery preparation only; Vendora does not issue wipe commands.", "No screen-lock, FRP, Activation Lock, or account bypass is provided.",
         "USB presence alone does not mean ADB authorisation is complete; enable USB debugging and approve this computer on the phone.",
         "Physical-device validation is required before claiming model compatibility."]}
 
