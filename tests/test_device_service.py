@@ -353,3 +353,22 @@ def test_phone_transfer_stops_before_copy_if_destination_not_authorised(monkeypa
     with pytest.raises(ValueError, match="destination phone"):
         ds.transfer_shared_media("PHONE_A", "PHONE_B")
     assert len(calls) == 2
+
+
+def test_phone_transfer_pulls_then_pushes_each_available_shared_folder(monkeypatch):
+    commands = []
+    def fake_run(command, timeout=12):
+        commands.append(command)
+        if "get-state" in command:
+            return {"ok": True, "stdout": "device", "stderr": ""}
+        if "test" in command:
+            return {"ok": True, "stdout": "", "stderr": ""}
+        return {"ok": True, "stdout": "ok", "stderr": ""}
+    monkeypatch.setattr(ds, "_run", fake_run)
+    monkeypatch.setattr(ds, "audit", lambda *args, **kwargs: None)
+    result = ds.transfer_shared_media("PHONE_A", "PHONE_B")
+    assert result["ok"] is True
+    assert len(result["transferred"]) == 5
+    assert any("pull" in command for command in commands)
+    assert any("push" in command for command in commands)
+    assert result["destination_folder"].startswith("/sdcard/Vendora_Transfer_")
