@@ -258,7 +258,7 @@ def test_boot_repair_fastboot_reads_identity_without_modifying_device(monkeypatc
     monkeypatch.setattr(ds, "audit", lambda *args, **kwargs: None)
     result = ds.assess_boot_repair("FAST123", "boot_loop")
     assert result["device_mode"] == "fastboot"
-    assert len(commands) == 4
+    assert len(commands) == 11
     assert all("getvar" in c for c in commands)
     assert not any(any(x in c for x in ("flash", "erase", "format", "reboot", "unlock")) for c in commands)
 
