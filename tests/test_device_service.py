@@ -329,13 +329,17 @@ def test_phone_transfer_requires_two_distinct_authorised_devices(monkeypatch):
     calls = []
     def fake_run(command, timeout=12):
         calls.append(command)
-        return {"ok": True, "stdout": "device", "stderr": ""}
+        if "get-state" in command:
+            return {"ok": True, "stdout": "device", "stderr": ""}
+        if "test" in command:
+            return {"ok": False, "stdout": "", "stderr": "missing"}
+        return {"ok": True, "stdout": "", "stderr": ""}
     monkeypatch.setattr(ds, "_run", fake_run)
     monkeypatch.setattr(ds, "audit", lambda *args, **kwargs: None)
     result = ds.transfer_shared_media("PHONE_A", "PHONE_B")
     assert result["operation"] == "shared_media_phone_to_phone_transfer"
     assert result["ok"] is False
-    assert len(calls) == 2
+    assert len(calls) == 7
     with pytest.raises(ValueError, match="different phones"):
         ds.transfer_shared_media("PHONE_A", "PHONE_A")
 
