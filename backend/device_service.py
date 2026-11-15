@@ -17,17 +17,39 @@ MANUFACTURER_PROTOCOLS = {
 
 def _run(command: list[str], timeout: int = 12) -> dict[str, Any]:
     try:
-        p = subprocess.run(command, capture_output=True, text=True, timeout=timeout, check=False)
+        p = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        )
         return {"ok": p.returncode == 0, "returncode": p.returncode, "stdout": p.stdout.strip(), "stderr": p.stderr.strip()}
     except FileNotFoundError:
         return {"ok": False, "error": f"{command[0]} was not found on PATH"}
     except subprocess.TimeoutExpired:
-        return {"ok": False, "error": "Command timed out"}
+        return {"ok": False, "error": f"{command[0]} timed out after {timeout} seconds"}
+    except OSError as error:
+        return {"ok": False, "error": f"Could not start {command[0]}: {error}"}
 
 def audit(action: str, details: dict[str, Any]) -> None:
-    AUDIT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with AUDIT_PATH.open("a", encoding="utf-8") as f:
-        f.write(json.dumps({"at": datetime.now(timezone.utc).isoformat(), "action": action, "details": details}) + "\n")
+    """Append a durable audit record without allowing disk errors to crash a device operation."""
+    record = (json.dumps({
+        "at": datetime.now(timezone.utc).isoformat(),
+        "action": action,
+        "details": details
+    }, separators=(",", ":")) + "\n").encode("utf-8")
+    try:
+        AUDIT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with AUDIT_PATH.open("ab") as stream:
+            stream.write(record)
+            stream.flush()
+            os.fsync(stream.fileno())
+    except OSError:
+        # A full disk, removed drive or sudden storage failure must not crash the UI/API.
+        # The operation result remains available; the audit failure is intentionally non-fatal.
+        return
 
 def tool_status() -> dict[str, bool]:
     return {name: shutil.which(name) is not None for name in ("adb", "fastboot")}
