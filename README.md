@@ -1,69 +1,67 @@
 # Vendora Mobile Toolkit — Development Build 0.6.0
 
-Windows-first desktop service toolkit for owner-authorised Android and Apple device diagnostics and recovery guidance.
+Windows-first desktop toolkit for owner-authorised Android and Apple device discovery, diagnostics and recovery workflows.
 
 ## Included
-- Electron desktop interface and local FastAPI backend.
-- Android ADB/Fastboot discovery, properties, diagnostics and safe reboot targets.
-- Firmware ZIP integrity and SHA-256 inspection (inspection only; no flashing).
-- Owner Recovery workflows for FRP owner recovery, forgotten screen locks, authorised carrier/network unlocking, and official OEM bootloader unlocking.
-- Explicit limitations and owner/data-protection warnings for all recovery workflows.
-- Manufacturer readiness catalogue for Samsung, Google, Qualcomm, MediaTek, Apple and generic Android.
-- Conservative Android family classification from reported device properties.
-- Read-only Windows USB Plug-and-Play inventory endpoint.
-- Desktop readiness panel and automated tests.\n- UI actions for owner-confirmed Android reboot to system, recovery or bootloader.\n- UI access to iPhone tooling status and read-only Windows USB inventory.
-- Windows x64 NSIS installer build configuration and GitHub Actions workflow.
+- Electron desktop interface with a local FastAPI backend.
+- Android ADB/Fastboot discovery, device properties, diagnostics and safe reboot targets.
+- Read-only Windows USB Plug-and-Play inventory.
+- Firmware ZIP integrity inspection and SHA-256 calculation (inspection only).
+- FRP owner-recovery guidance, forgotten-screen-lock guidance, carrier-authorised SIM/network unlock guidance and official OEM bootloader-unlock guidance.
+- Read-only Boot Repair assessment for startup-logo freezes, boot loops, failed updates, recovery-mode issues and black screens.
+- Automatic repair preflight: device/protocol identification, USB inventory, firmware archive metadata and programmer-file hashing.
+- Flashing engine registry, capability report, flash-plan endpoint and fail-closed execution endpoint.
+- Automated Python tests and Windows x64 NSIS installer workflow.
 
-## Status and limitations
-Manufacturer protocol profiles are readiness records, not completed vendor flashing engines. Qualcomm EDL and MediaTek BootROM/Preloader servicing are not implemented. Samsung Download Mode servicing is not implemented. Apple discovery remains experimental. No firmware is automatically selected or flashed. Owner recovery includes official forgotten-screen-lock guidance, carrier-authorised SIM/network unlock request guidance, and manufacturer-supported bootloader unlock guidance. These are guided workflows, not universal automated unlock engines. FRP owner recovery provides ownership-verification guidance and official Google Account/manufacturer support routes only. No PIN/pattern removal, FRP bypass/removal, Activation Lock bypass, account bypass, carrier-code generation, OEM eligibility bypass or generic forced bootloader unlock is provided. Physical-device validation is outstanding; unknown models must remain unverified.
+## Recovery workflow scope
+These are guided owner-recovery workflows, not universal automated unlock engines.
+- **FRP:** ownership-verification checklist, previously synced Google Account recovery guidance and authorised manufacturer/service-centre referral. Vendora does not bypass or disable FRP and never collects account passwords or verification codes.
+- **Screen lock:** official account/manufacturer recovery and authorised reset guidance. It does not remove a PIN/pattern or defeat device security.
+- **SIM/network unlock:** carrier eligibility checklist and authorised request process. Carrier eligibility lookup and unlock-code generation are not implemented.
+- **Bootloader unlock:** OEM compatibility and official procedure guidance. No generic forced unlock command or automated OEM eligibility bypass is provided.
 
-## Current desktop actions\nThe desktop interface now exposes the safe Android reboot endpoint with an explicit confirmation, plus iPhone tooling-status and Windows USB-inventory checks. The iPhone endpoint now attempts read-only discovery through the optional `pymobiledevice3 usbmux list` command. Install `pymobiledevice3` separately and, on Windows, install Apple's classic iTunes package to provide Apple Mobile Device Service. Discovery is not iOS repair or restore. See the [pymobiledevice3 installation guide](https://github.com/doronz88/pymobiledevice3/blob/master/docs/installation.md).\n\n## API additions
-- GET /api/readiness — tool availability, protocol profiles and limitations.
-- GET /api/devices/usb — read-only Windows USB PnP inventory.
-- POST /api/android/classify — classify a connected Android device from its reported properties.
+## Boot Repair assessment
+The assessment reads ADB properties/diagnostics when an authorised ADB session exists and selected Fastboot getvar fields when a device is already in Fastboot. It does not reboot, unlock, erase, format or flash a device. If no supported protocol is detected, it reports that limitation and provides safe next steps. This is diagnostic triage, not a firmware repair engine.
 
-## Tests
-Install development/test dependencies from the project root with `python -m pip install -r backend/requirements-dev.txt`, then run `python -m pytest -q`. The runtime requirements exclude test-only packages.
+## Automatic repair preparation
+The preflight planner can identify a selected ADB/Fastboot device, read reported manufacturer/model/product/build and chipset properties, inspect Windows USB PnP status, classify the likely protocol family, inspect a supplied ZIP and extract limited metadata, hash a supplied programmer/Download Agent file, and report blockers with a suggested pipeline. Metadata token matches do not prove firmware compatibility or authenticity; a file hash does not prove OEM authorisation or signature validity.
 
-## Reliability, packaging and source protection
-- Desktop startup waits for the local backend health check and records diagnostic logs under the user's application data folder.
+Endpoint: `POST /api/repair/prepare`. It is strictly read-only and returns `execution_enabled: false`. It does not install drivers, download firmware, validate OEM signatures, flash, erase, unlock or reset devices.
+
+## Firmware flashing and customer approval
+The flashing workspace exposes an engine registry, capability report, flash-plan endpoint and fail-closed execution endpoint. Before any production engine can be enabled, it must implement and pass:
+1. Exact device/model/board and hardware-revision identification.
+2. Trusted OEM firmware provenance and cryptographic signature verification.
+3. Exact partition-plan and anti-rollback verification.
+4. Required authorised programmer and driver checks.
+5. Physical-device validation for every supported model/variant.
+6. A fresh, single-use customer approval bound to the exact device serial, firmware SHA-256, engine and partition-plan hash.
+7. A live device and package re-check immediately before the first write.
+
+**Current status:** Google/Android Fastboot is not model-validated; Samsung Download Mode is not implemented; Qualcomm EDL and MediaTek Preloader are not implemented. No production write engine is enabled. The Flash button remains locked and the backend rejects flash execution. Customer approval will not override a failed compatibility or authenticity check. This framework is not yet a working universal flasher.
+
+## Device-changing operations
+Android reboot operations use a short-lived, one-time approval challenge bound to the selected device and target. Factory-reset preparation only reboots to Android Recovery; it does not issue a wipe command. Device-changing actions must never run automatically on connection or selection.
+
+## Apple support
+Apple discovery is experimental and depends on optional `pymobiledevice3` and Apple device support components. Discovery is not iOS repair, restore or Activation Lock removal.
+
+## Reliability and packaging
+- Desktop startup waits for the local backend health check.
 - The desktop app uses a single-instance lock, backend restart attempts, renderer crash recovery and graceful shutdown handling.
 - Audit entries are flushed to disk; audit-storage errors are non-fatal to device operations.
-- Release preparation minifies the desktop JavaScript and packages only the release bundle, not the original desktop JavaScript file.
-- Electron resources are packaged in ASAR and the NSIS installer uses maximum compression.
-- The backend is packaged as a PyInstaller executable rather than loose Python source files. This raises the effort required to inspect it but does not make reverse engineering impossible; Python bytecode and Electron resources can still be extracted by determined users.
-- Installer size and recovery behaviour must be measured on a real Windows build. No size target or crash-proof guarantee is claimed before that testing.
+- The backend is packaged with PyInstaller; Electron resources are packaged in ASAR and release JavaScript is minified. These measures make casual inspection harder but do not prevent determined reverse engineering.
+- USB drivers and external vendor service components may still need separate installation; support depends on the exact device and Windows driver state.
 
-## External device tools\n- Android: install the official [Android SDK Platform-Tools](https://developer.android.com/tools/releases/platform-tools) for `adb` and `fastboot`. The current installer does not bundle these tools or OEM USB drivers.\n- iPhone/iPad: install `pymobiledevice3` separately; Windows also needs Apple's classic iTunes package for Apple Mobile Device Service. The Microsoft Store Apple Devices service has known discovery limitations in some Wi-Fi scenarios.\n\n## Windows installer
-The GitHub Actions workflow builds a Windows x64 NSIS installer. Open **Actions**, select **Windows installer**, and choose **Run workflow**, or push a `v*` tag. Download the resulting installer artifact.
+## Tests
+Install development dependencies with `python -m pip install -r backend/requirements-dev.txt`, then run `python -m pytest -q` from the repository root.
+
+## Windows installer
+The GitHub Actions **Windows installer** workflow builds a Windows x64 NSIS installer on pushes to `main`. Download its artifact from the successful workflow run under **Actions**. The installer artifact is a ZIP containing the installer; the artifact archive size is not the same as the installed application size.
 
 For a local Windows build with Python 3.11+ and Node.js 20+:
-1. Run `backend\build_windows.bat`.
+1. Run `backend\\build_windows.bat`.
 2. Run `npm install` inside `desktop`.
 3. Run `npm run dist:win` inside `desktop`.
 
-The workflow has been prepared but has not yet been executed on a Windows runner. No installer is claimed as built or verified yet.
-
-
-## Owner recovery workflows
-- **FRP owner recovery:** provides an ownership-verification checklist, previously synced Google Account recovery guidance, manufacturer/authorised-service referral steps and a privacy-conscious audit event. It never collects Google credentials and does not bypass or disable FRP. No OEM FRP-removal integration is connected.
-- **Forgotten screen lock:** provides official account/manufacturer recovery steps and explains when an authorised reset may erase local data. It does not remove credentials or bypass anti-theft checks.
-- **SIM/network unlock:** provides a carrier eligibility checklist and authorised request procedure. Carrier eligibility lookup and unlock-code generation require a supported carrier integration and are not implemented.
-- **Bootloader unlock:** provides OEM compatibility checks, consequences and official procedure guidance. There is no generic fastboot unlock command and no automated OEM unlock engine in this build.
-- Device-changing operations remain separately approval-gated. These three guidance workflows do not themselves issue device commands.
-
-
-## Boot Repair assessment (read-only)
-The Boot Repair workspace can assess a reported startup-logo freeze, boot loop, failed update, recovery-mode issue or black screen. It calls the local ADB/Fastboot discovery tools, reads Android properties/diagnostics when an authorised ADB session exists, and reads selected Fastboot getvar fields when a device is already in Fastboot. It does not reboot, unlock, erase, format or flash a device. When no supported protocol is detected it provides safe next-step guidance and reports the limitation. This is a real diagnostic and triage workflow, not a firmware repair engine. Manufacturer-specific Download Mode, EDL, Preloader and firmware flashing engines remain unimplemented and require separate device-family validation.
-
-
-## Automatic repair preparation (read-only)
-The System Repair workspace includes an automatic preflight planner. It can select a uniquely detected ADB/Fastboot device, read reported manufacturer/model/product/build and available chipset properties, inspect Windows USB PnP status, identify the relevant manufacturer protocol profile, inspect a supplied ZIP archive and extract limited package metadata, hash a supplied programmer/Download Agent file, and report blockers plus a recommended repair pipeline. A metadata token match is never treated as proof of firmware compatibility or authenticity. A programmer file hash does not prove OEM authorisation or signature validity.
-
-The preflight endpoint is `POST /api/repair/prepare`. It is strictly read-only and always returns `execution_enabled: false`. It does not install drivers, download firmware, validate cryptographic OEM signatures, flash, erase, unlock or reset devices. The Samsung Download Mode, Qualcomm EDL and MediaTek Preloader engines remain unimplemented; their exact model/board-specific authorised packages and physical validation are still required. The UI accepts optional firmware and programmer paths for inspection only.
-
-
-## Firmware flashing architecture and customer approval
-The firmware workspace exposes an engine registry, capability report, flash-plan endpoint and a fail-closed execution endpoint. A flash engine must be explicitly enabled only after exact model/board allow-listing, OEM firmware signature/provenance verification, partition-plan verification, anti-rollback checks, required authorised programmer/driver checks and physical-device validation. Customer approval must be a fresh, single-use approval bound to the exact device serial, firmware SHA-256, engine and partition-plan hash, and the device must be rechecked immediately before writing.
-
-Current status: Google/Android Fastboot is not model-validated; Samsung Download Mode is not implemented; Qualcomm EDL and MediaTek Preloader are not implemented. No production write engine is enabled in this build. The desktop Flash button remains locked and the backend rejects all flash execution requests. This is intentional: a customer confirmation cannot make unverified firmware safe. The framework is ready for separately validated model-specific engine adapters; it is not yet a working universal flasher.
+A successful CI package build verifies the build and smoke-test steps, but physical-device behaviour still requires testing on supported sample phones. No claim of universal device compatibility or risk-free repair is made.
