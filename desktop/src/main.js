@@ -29,4 +29,17 @@ $("firmwareBtn").onclick=async()=>{try{const path=$("firmwarePath").value.trim()
 $("factoryResetPrepareBtn").onclick=async()=>{const serial=$("repairDevice").value;if(!serial){output("repairOutput","Select an authorised Android device first.");return;}if(!$("resetBackupAck").checked){output("repairOutput","Confirm that important data is backed up before proceeding.");return;}const confirmation=window.prompt('Type PREPARE RECOVERY to confirm:');if(confirmation===null)return;try{output("repairOutput","Verifying device and preparing approval…");const preview=await api("/api/operations/preview",{method:"POST",body:JSON.stringify({serial,operation:"factory_reset_prepare",backup_confirmed:true,confirmation})});const p=preview.device||{};const summary="RECOVERY PREPARATION APPROVAL\\nDevice: "+(p["ro.product.manufacturer"]||"Unknown")+" "+(p["ro.product.model"]||"Unknown")+"\\nSerial: "+serial+"\\nAction: Reboot into Recovery Mode\\nBackup confirmed: Yes\\n\\nVendora will NOT erase data. This approval is single-use and expires in 2 minutes. Continue?";if(!window.confirm(summary)){output("repairOutput","Operation cancelled. No device command was sent.");return;}const approved=await api("/api/operations/approve",{method:"POST",body:JSON.stringify({challenge_id:preview.challenge_id})});const result=await api("/api/android/factory-reset/prepare",{method:"POST",body:JSON.stringify({serial,backup_confirmed:true,confirmation,approval_token:approved.approval_token})});output("repairOutput",result);}catch(e){output("repairOutput","Recovery preparation not performed: "+e.message);}};
 $("iphoneBtn").onclick=async()=>{try{const r=await api("/api/devices/iphone");output("otherDevicesOutput",r);}catch(e){output("otherDevicesOutput",e.message);}};
 document.querySelectorAll(".recovery-card").forEach(b=>b.onclick=async()=>{const platform=b.dataset.platform;$("recoveryState").textContent=platform==="ios"?"APPLE RECOVERY":"ANDROID RECOVERY";try{const r=await api("/api/recovery/"+platform);output("unlockOutput",r.steps.map((x,i)=>(i+1)+". "+x).join("\n"));}catch(e){output("unlockOutput",e.message);}});
+
+document.querySelectorAll("[data-workflow]").forEach(b=>b.onclick=async()=>{
+ const workflow=b.dataset.workflow;
+ const labels={screen_lock:"SCREEN-LOCK RECOVERY",carrier_unlock:"SIM / NETWORK UNLOCK",bootloader_unlock:"OFFICIAL BOOTLOADER UNLOCK"};
+ $("workflowState").textContent=labels[workflow]||"RECOVERY WORKFLOW";
+ output("workflowOutput","Loading official owner-recovery guidance…");
+ try {
+  const r=await api("/api/recovery/workflows/"+workflow);
+  const lines=[r.title||labels[workflow]||"RECOVERY WORKFLOW","STATUS: "+(r.status||"GUIDANCE_ONLY"),"",...(r.steps||[]).map((x,i)=>(i+1)+". "+x),"","IMPORTANT LIMITS",...(r.limitations||[]).map(x=>"• "+x)];
+  output("workflowOutput",lines.join("\n"));
+ } catch(e) { output("workflowOutput","Could not load this workflow: "+e.message); }
+});
+
 health();readiness();setInterval(health,8000);
