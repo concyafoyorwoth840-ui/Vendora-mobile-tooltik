@@ -231,6 +231,63 @@ def recovery_guidance(platform: str) -> list[str]:
     if platform == "ios": return ["Confirm ownership and check that a current backup exists.", "Use Apple's official recovery-mode update/restore instructions for the exact device.", "A restore can erase data; explain this before proceeding.", "Activation Lock requires the linked Apple Account or Apple's ownership-support process."]
     raise ValueError("Unknown platform")
 
+
+def unlock_workflow_guidance(workflow: str) -> dict[str, Any]:
+    """Return safe, official owner-recovery steps; never claims to unlock a device."""
+    workflows = {
+        "screen_lock": {
+            "title": "Forgotten Android screen-lock recovery",
+            "status": "OFFICIAL_RECOVERY_GUIDANCE",
+            "steps": [
+                "Confirm the person requesting help is the device owner or is authorised by the owner. Record the exact model and Android version.",
+                "Try the device manufacturer's documented account/device-recovery options first. Availability differs by model and Android version.",
+                "If the device offers an official on-device recovery route, follow the manufacturer's instructions. Do not use third-party lock-removal utilities.",
+                "If recovery is not possible, explain that an official factory reset may erase local data. Confirm backups and ownership before the owner chooses any reset.",
+                "After a reset, the device may require the Google Account previously synced to it. The owner must recover that account through Google's official account-recovery process.",
+                "If the owner cannot prove account ownership or activation eligibility, stop and refer them to the manufacturer or authorised service provider."
+            ],
+            "limitations": [
+                "Vendora does not remove PINs, patterns, passwords or biometrics, and does not bypass FRP or other anti-theft protections.",
+                "A reset is not a data-recovery method and can permanently erase data that is not backed up."
+            ]
+        },
+        "carrier_unlock": {
+            "title": "SIM / network carrier unlock",
+            "status": "CARRIER_AUTHORISED_PROCESS",
+            "steps": [
+                "Identify the original selling/network carrier, country, exact phone model and whether the device is paid off or under contract.",
+                "Ask the original carrier to check the device's network-lock status and eligibility. Only the carrier or its authorised unlock provider can confirm eligibility against its records.",
+                "Resolve any outstanding contract, instalment, blacklist, lost/stolen or account requirements directly with the carrier.",
+                "Submit the carrier's official unlock request. Keep its case/reference number and follow its instructions; some carriers process the unlock remotely and others provide a code.",
+                "When the carrier confirms completion, insert a SIM from another supported network and follow the carrier's activation instructions.",
+                "If the phone remains locked, return to the original carrier with the case number. Do not use unofficial code generators or IMEI alteration services."
+            ],
+            "limitations": [
+                "Vendora cannot query carrier eligibility or generate a network unlock code without an authorised carrier integration.",
+                "Do not share an IMEI, account password or identity document with unofficial services. Provide sensitive details only through the carrier's verified channel."
+            ]
+        },
+        "bootloader_unlock": {
+            "title": "Manufacturer-supported bootloader unlocking",
+            "status": "OEM_COMPATIBILITY_CHECK_REQUIRED",
+            "steps": [
+                "Identify the exact manufacturer, model/variant, region and current software build. Bootloader unlock support varies by model, carrier and region.",
+                "Check the manufacturer's official developer documentation and eligibility page for that exact model. Some models cannot be officially unlocked.",
+                "Explain that unlocking commonly triggers a complete factory data wipe and may affect warranty, security features, DRM or payment applications.",
+                "Back up owner data and confirm the owner understands the consequences before proceeding.",
+                "Follow only the exact manufacturer's documented unlock process. Complete any OEM account, waiting-period or unlock-token requirements through the official portal.",
+                "If the OEM procedure requires on-device confirmation, the owner must review and confirm that prompt on the phone. Stop if the model or instructions do not match."
+            ],
+            "limitations": [
+                "Vendora does not force-unlock bootloaders, bypass OEM eligibility, defeat FRP or execute a generic fastboot unlock command across manufacturers.",
+                "This release provides the guided OEM workflow only; automated manufacturer-specific unlock engines are not implemented."
+            ]
+        }
+    }
+    if workflow not in workflows:
+        raise ValueError("Unknown recovery workflow")
+    return workflows[workflow]
+
 def windows_usb_inventory() -> dict[str, Any]:
     if os.name != "nt": return {"supported": False, "devices": [], "message": "Windows USB inventory is available only on Windows."}
     # Include composite USB interfaces and Windows portable-device (MTP/WPD) nodes.
