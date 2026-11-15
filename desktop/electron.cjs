@@ -77,7 +77,13 @@ function startBackend() {
       cwd: command.cwd,
       windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, PYTHONUNBUFFERED: "1" }
+      env: {
+        ...process.env,
+        PYTHONUNBUFFERED: "1",
+        VENDORA_PLATFORM_TOOLS: app.isPackaged
+          ? path.join(process.resourcesPath, "platform-tools")
+          : path.join(__dirname, "..", "backend", "vendor", "platform-tools")
+      }
     });
   } catch (error) {
     log(`Backend spawn failed: ${error.message}`);
