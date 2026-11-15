@@ -44,6 +44,18 @@ $("bootAssessBtn").onclick=async()=>{
   output("repairOutput",lines.join("\\n"));
  } catch(e) { output("repairOutput","Boot assessment failed: "+e.message); }
 };
+$("repairPrepareBtn").onclick=async()=>{
+ const serial=$("repairDevice").value||"";
+ const symptom=$("bootSymptom")?.value||"stuck_logo";
+ const firmware_path=$("repairFirmwarePath").value.trim();
+ const programmer_path=$("repairProgrammerPath").value.trim();
+ output("repairOutput","Preparing automatic repair plan… This is read-only; no phone commands will be written.");
+ try {
+  const r=await api("/api/repair/prepare",{method:"POST",body:JSON.stringify({serial,symptom,firmware_path,programmer_path})});
+  const lines=["AUTOMATIC REPAIR PREPARATION","Read-only: "+r.read_only,"Execution enabled: "+r.execution_enabled,"Repair ready: "+r.repair_ready,"","DEVICE","Manufacturer: "+r.device.manufacturer,"Model: "+r.device.model,"Product / board: "+r.device.product_or_board,"Chipset: "+r.device.chipset,"Protocol: "+r.device.protocol_family,"Connection: "+r.device_mode,"","PROTOCOL ENGINE",r.protocol_engine.name+" · "+r.protocol_engine.status,...(r.protocol_engine.requirements||[]).map(x=>"Required: "+x),"","DRIVER CHECK",JSON.stringify(r.driver_check,null,2),"","FIRMWARE CHECK",JSON.stringify(r.firmware_check,null,2),"","PROGRAMMER CHECK",JSON.stringify(r.programmer_check,null,2),"","BLOCKERS",...(r.blockers||[]).map(x=>"• "+x),"","RECOMMENDED AUTOMATION PIPELINE",...(r.recommended_pipeline||[]).map((x,i)=>(i+1)+". "+x),"","SAFETY LIMITS",...(r.limitations||[]).map(x=>"• "+x)];
+  output("repairOutput",lines.join("\n"));
+ } catch(e) { output("repairOutput","Repair preparation failed: "+e.message); }
+};
 $("iphoneBtn").onclick=async()=>{try{const r=await api("/api/devices/iphone");output("otherDevicesOutput",r);}catch(e){output("otherDevicesOutput",e.message);}};
 document.querySelectorAll(".recovery-card").forEach(b=>b.onclick=async()=>{const platform=b.dataset.platform;$("recoveryState").textContent=platform==="ios"?"APPLE RECOVERY":"ANDROID RECOVERY";try{const r=await api("/api/recovery/"+platform);output("unlockOutput",r.steps.map((x,i)=>(i+1)+". "+x).join("\n"));}catch(e){output("unlockOutput",e.message);}});
 
