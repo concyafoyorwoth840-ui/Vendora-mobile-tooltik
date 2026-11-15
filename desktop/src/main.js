@@ -4,7 +4,35 @@ function output(id,v){$(id).textContent=typeof v==="string"?v:JSON.stringify(v,n
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 async function health(){try{const h=await api("/api/health");$("statusText").textContent="Local service connected";$("sideStatus").textContent="Connected";$("statusDot").style.background="#31d68a";$("toolsState").textContent=(h.tools.adb?"ADB":"—")+" / "+(h.tools.fastboot?"Fastboot":"—");}catch(e){$("statusText").textContent="Backend unavailable";$("sideStatus").textContent="Unavailable";$("statusDot").style.background="#e6a23c";$("toolsState").textContent="Offline";}}
 async function readiness(){try{output("readinessOutput",await api("/api/readiness"));}catch(e){output("readinessOutput",e.message);}}
-async function scan(){$("deviceList").textContent="Scanning…";try{const d=await api("/api/devices/android");devices=[...(d.adb||[]).map(x=>({...x,mode:"ADB"})),...(d.fastboot||[]).map(x=>({...x,mode:"Fastboot"}))];$("adbCount").textContent=(d.adb||[]).length;$("fbCount").textContent=(d.fastboot||[]).length;$("deviceList").innerHTML=devices.length?devices.map(x=>'<div class="device"><b>'+esc(x.serial)+'</b><span>'+esc(x.mode)+" · "+esc(x.state)+'</span></div>').join(""):"No Android devices detected. Enable USB debugging or use the correct USB mode.";$("repairDevice").innerHTML=devices.filter(x=>x.mode==="ADB"&&x.state==="device").map(x=>'<option value="'+esc(x.serial)+'">'+esc(x.serial)+'</option>').join("")||'<option value="">No authorised ADB device</option>';}catch(e){$("deviceList").textContent=e.message;}}
+async function scan(){
+  $("deviceList").textContent="Scanning Android and USB devices…";
+  try{
+    const [d,usb]=await Promise.all([
+      api("/api/devices/android"),
+      api("/api/devices/usb").catch(error=>({supported:false,devices:[],message:error.message}))
+    ]);
+    devices=[...(d.adb||[]).map(x=>({...x,mode:"ADB"})),...(d.fastboot||[]).map(x=>({...x,mode:"Fastboot"}))];
+    $("adbCount").textContent=(d.adb||[]).length;
+    $("fbCount").textContent=(d.fastboot||[]).length;
+    const androidRows=devices.map(x=>{
+      const hint=x.state==="unauthorized"?" — unlock phone and approve USB debugging prompt":x.state==="offline"?" — reconnect cable and restart ADB":"";
+      return '<div class="device"><b>'+esc(x.serial)+'</b><span>'+esc(x.mode)+" · "+esc(x.state)+esc(hint)+'</span></div>';
+    });
+    const usbRows=(usb.devices||[]).map(x=>{
+      const name=x.FriendlyName||x.Name||"USB device";
+      const status=x.Status||"Unknown status";
+      return '<div class="device"><b>'+esc(name)+'</b><span>Windows USB · '+esc(status)+'</span></div>';
+    });
+    let message="";
+    if(!devices.length){
+      message='<p>No ADB/Fastboot phone session found.</p><p><b>Next checks:</b> unlock Android, choose File Transfer (MTP), enable Developer options → USB debugging, reconnect and approve the computer prompt. If the phone appears in Windows USB below but not ADB, its USB driver or debugging authorisation may be missing.</p>';
+      if(d.warnings&&d.warnings.length) message+='<p>ADB/Fastboot warning: '+esc(d.warnings.join("; "))+'</p>';
+    }
+    const usbHeader=usb.supported?'<p><b>Windows USB devices currently present: '+((usb.devices||[]).length)+'</b></p>':'<p>Windows USB inventory unavailable: '+esc(usb.message||"")+'</p>';
+    $("deviceList").innerHTML=androidRows.join("")+message+usbHeader+usbRows.slice(0,12).join("")+(usbRows.length>12?'<p>Showing first 12 USB entries.</p>':"");
+    $("repairDevice").innerHTML=devices.filter(x=>x.mode==="ADB"&&x.state==="device").map(x=>'<option value="'+esc(x.serial)+'">'+esc(x.serial)+'</option>').join("")||'<option value="">No authorised ADB device</option>';
+  }catch(e){$("deviceList").textContent=e.message;}
+}
 document.querySelectorAll(".nav").forEach(b=>b.onclick=()=>{document.querySelectorAll(".nav").forEach(x=>x.classList.toggle("active",x===b));document.querySelectorAll(".page").forEach(x=>x.classList.toggle("active",x.id===b.dataset.tab));$("pageTitle").textContent=b.textContent.trim();});
 $("scanBtn").onclick=$("refreshBtn").onclick=scan;$("readinessBtn").onclick=readiness;
 for(const [id,path] of [["propsBtn","/api/android/properties"],["diagBtn","/api/android/diagnostics"],["classifyBtn","/api/android/classify"]])$(id).onclick=async()=>{try{if(!$("repairDevice").value)throw new Error("Connect and authorise an ADB device first.");output("repairOutput",await api(path,{method:"POST",body:JSON.stringify({serial:$("repairDevice").value})}));}catch(e){output("repairOutput",e.message);}};
