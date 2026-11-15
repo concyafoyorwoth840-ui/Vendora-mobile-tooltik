@@ -148,7 +148,7 @@ def build_repair_plan(serial: str = "", symptom: str = "stuck_logo",
     if programmer_path:
         p = Path(programmer_path).expanduser()
         if p.is_file() and p.stat().st_size <= 512 * 1024 * 1024:
-            digest = hashlib.sha256(p.read_bytes()).hexdigest()
+            digest_obj = hashlib.sha256()\n            with p.open("rb") as stream:\n                for chunk in iter(lambda: stream.read(1024 * 1024), b""):\n                    digest_obj.update(chunk)\n            digest = digest_obj.hexdigest()
             programmer = {"provided": True, "status": "file_present_untrusted", "file": p.name,
                           "size_bytes": p.stat().st_size, "sha256": digest,
                           "note": "File presence and hash do not establish OEM authorisation, signature validity or chipset compatibility."}
