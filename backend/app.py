@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from device_service import (tool_status, discover_android, android_properties,
     android_diagnostics, reboot_android, inspect_firmware_zip, iphone_status,
-    recovery_guidance, classify_android, windows_usb_inventory, readiness_report, prepare_factory_reset,
+    recovery_guidance, unlock_workflow_guidance, classify_android, windows_usb_inventory, readiness_report, prepare_factory_reset,
     create_operation_preview, approve_operation)
 
 app = FastAPI(title="Vendora Mobile Toolkit API", version="0.6.0")
@@ -99,6 +99,12 @@ def factory_reset_prepare(req: FactoryResetPrepareRequest):
 @app.post("/api/firmware/inspect")
 def firmware(req: FirmwareRequest):
     try: return inspect_firmware_zip(req.path)
+    except ValueError as e: raise HTTPException(400, str(e))
+
+
+@app.get("/api/recovery/workflows/{workflow}")
+def recovery_workflow(workflow: str):
+    try: return unlock_workflow_guidance(workflow)
     except ValueError as e: raise HTTPException(400, str(e))
 
 @app.get("/api/recovery/{platform}")
