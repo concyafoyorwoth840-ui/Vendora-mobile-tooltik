@@ -161,3 +161,18 @@ def test_phone_transfer_endpoint_calls_transfer_engine(monkeypatch):
     assert response.status_code == 200
     assert response.json()["ok"] is True
     assert captured == {"source": "PHONE_A", "destination": "PHONE_B"}
+
+
+def test_media_restore_endpoint_calls_restore_engine(monkeypatch, tmp_path):
+    captured = {}
+    def fake_restore(serial, source_folder):
+        captured["serial"] = serial
+        captured["source_folder"] = source_folder
+        return {"ok": True, "operation": "accessible_shared_media_restore"}
+    monkeypatch.setattr(api, "restore_accessible_media", fake_restore)
+    response = client.post("/api/android/media-restore", json={
+        "serial": "PHONE_A", "source_folder": str(tmp_path)
+    })
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    assert captured == {"serial": "PHONE_A", "source_folder": str(tmp_path)}
