@@ -263,3 +263,26 @@ def readiness_report() -> dict[str, Any]:
         "No firmware is selected or flashed automatically.", "No screen-lock, FRP, Activation Lock, or account bypass is provided.",
         "USB presence alone does not mean ADB authorisation is complete; enable USB debugging and approve this computer on the phone.",
         "Physical-device validation is required before claiming model compatibility."]}
+
+
+def prepare_factory_reset(serial: str, backup_confirmed: bool, confirmation: str) -> dict[str, Any]:
+    """Safely prepare a user-confirmed reset by entering stock recovery; never issues wipe commands."""
+    if not _valid_serial(serial):
+        raise ValueError("Invalid device serial")
+    if backup_confirmed is not True:
+        raise ValueError("Confirm that important data is backed up before continuing.")
+    if confirmation != "PREPARE RECOVERY":
+        raise ValueError('Type PREPARE RECOVERY exactly to confirm this operation.')
+    identity = android_properties(serial)
+    if not identity.get("ok"):
+        raise ValueError(identity.get("error") or "Unable to verify the selected Android device.")
+    result = reboot_android(serial, "recovery")
+    audit("factory_reset_recovery_preparation", {
+        "serial": serial, "backup_confirmed": True, "reboot_ok": result.get("ok", False)
+    })
+    return {
+        "ok": bool(result.get("ok")),
+        "stage": "recovery_preparation",
+        "result": result,
+        "message": "The phone was asked to reboot into recovery. Vendora did NOT erase data. Review the recovery screen on the phone; only choose Wipe data/factory reset there if the owner has explicitly authorised erasure."
+    }
