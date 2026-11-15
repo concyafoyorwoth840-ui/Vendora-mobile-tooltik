@@ -86,7 +86,8 @@ def discover_android() -> dict[str, Any]:
     return {"adb_available": tool_status()["adb"], "fastboot_available": tool_status()["fastboot"],
         "adb": _parse_adb_devices(adb.get("stdout", "")) if adb["ok"] else [],
         "fastboot": _parse_fastboot_devices(fastboot.get("stdout", "")) if fastboot["ok"] else [],
-        "warnings": [x for x in (adb.get("error"), fastboot.get("error")) if x]}
+        "warnings": [message for result in (adb, fastboot) if not result["ok"]
+            for message in (result.get("error") or result.get("stderr") or "Command failed without diagnostic output",)]}
 
 def _valid_serial(serial: str) -> bool:
     return bool(serial and len(serial) <= 128 and re.fullmatch(r"[A-Za-z0-9._:-]+", serial))
