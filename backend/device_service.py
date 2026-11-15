@@ -117,13 +117,13 @@ def classify_android(manufacturer: str = "", model: str = "", device: str = "", 
     # TECNO, Infinix and itel commonly ship MediaTek hardware; reporting only
     # "MediaTek" loses the manufacturer identity needed for model-specific support.
     brand_text = " ".join((manufacturer, model, device, fingerprint)).lower()
-    if "samsung" in brand_text or re.search(r"\\bsm-[a-z0-9]+\\b", brand_text):
+    if "samsung" in brand_text or re.search(r"\bsm-[a-z0-9]+\b", brand_text):
         brand_key, brand_label = "samsung", "Samsung"
     elif "tecno" in brand_text:
         brand_key, brand_label = "tecno", "TECNO"
     elif "infinix" in brand_text:
         brand_key, brand_label = "infinix", "Infinix"
-    elif re.search(r"\\bitel\\b", brand_text):
+    elif re.search(r"\bitel\b", brand_text):
         brand_key, brand_label = "itel", "itel"
     elif any(x in brand_text for x in ("xiaomi", "redmi", "poco")):
         brand_key, brand_label = "xiaomi", "Xiaomi / Redmi / POCO"
