@@ -655,7 +655,8 @@ def assess_boot_repair(serial: str = "", symptom: str = "stuck_logo") -> dict[st
         "limitations": [
             "This assessment does not repair, wipe, flash, unlock or reboot the phone.",
             "USB inventory alone is not proof that a bootloader, recovery or service protocol is usable.",
-            "A firmware repair engine is not implemented; never flash a package based only on a matching brand."
+            "No Samsung Odin, MediaTek Download Agent or Qualcomm EDL write engine is enabled in this build.",
+            "Fastboot variables are read-only identifiers; they do not prove firmware signature or partition compatibility."
         ]
     }
     if selected_adb and selected_adb.get("state") == "device":
@@ -678,9 +679,19 @@ def assess_boot_repair(serial: str = "", symptom: str = "stuck_logo") -> dict[st
         report["device_mode"] = "adb_" + selected_adb.get("state", "unknown")
     elif selected_fastboot:
         report["device_mode"] = "fastboot"
-        for key in ("product", "version", "current-slot", "unlocked"):
+        # Collect a broader read-only bootloader identity snapshot. Fastboot often
+        # writes getvar responses to stderr even when the command succeeds.
+        for key in ("product", "variant", "version", "bootloader-version",
+                    "current-slot", "slot-count", "unlocked", "secure",
+                    "is-userspace", "has-slot:boot", "has-slot:system"):
             value = _run([_tool_path("fastboot"), "-s", serial, "getvar", key], timeout=8)
-            report["identity"][key] = (value.get("stderr") or value.get("stdout") or "").strip()
+            raw = (value.get("stderr") or value.get("stdout") or "").strip()
+            report["identity"][key] = raw or (value.get("error") or "not reported")
+        report["identity"]["identity_confidence"] = (
+            "bootloader_reported" if report["identity"].get("product") not in {"", "unknown variable", "not reported"}
+            else "limited"
+        )
+        report["identity"]["write_commands_sent"] = False
     elif not serial and (adb_rows or fastboot_rows):
         report["device_mode"] = "multiple_devices_detected"
     report["assessment"] = {
