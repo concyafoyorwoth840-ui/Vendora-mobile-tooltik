@@ -82,3 +82,39 @@ def test_iphone_status_handles_usbmux_failure(monkeypatch):
     assert result["supported_library_installed"] is True
     assert result["count"] == 0
     assert "Apple Mobile Device Service" in result["message"]
+
+
+def test_battery_diagnostics_parser():
+    parsed = ds._parse_battery_diagnostics(
+        "AC powered: false\\nUSB powered: true\\nstatus: 2\\nhealth: 2\\nlevel: 87\\ntemperature: 315\\nvoltage: 4100\\n"
+    )
+    assert parsed["level_percent"] == 87
+    assert parsed["status"] == "charging"
+    assert parsed["health"] == "good"
+    assert parsed["temperature_c"] == 31.5
+    assert parsed["voltage_mv"] == 4100
+
+
+def test_data_storage_parser():
+    parsed = ds._parse_data_storage(
+        "Filesystem      Size Used Avail Use% Mounted on\\n/dev/block/dm-10  100G 60G 40G 60% /data\\n"
+    )
+    assert parsed["size"] == "100G"
+    assert parsed["available"] == "40G"
+    assert parsed["use_percent"] == "60%"
+    assert parsed["mount"] == "/data"
+
+
+def test_android_diagnostics_returns_parsed_summary(monkeypatch):
+    def fake_run(command, timeout=12):
+        if "dumpsys" in command:
+            return {"ok": True, "stdout": "level: 90\\nstatus: 5\\nhealth: 2\\ntemperature: 300"}
+        if "df" in command:
+            return {"ok": True, "stdout": "Filesystem Size Used Avail Use% Mounted on\\n/dev/block/dm-1 64G 20G 44G 32% /data"}
+        return {"ok": True, "stdout": "up 2 days"}
+    monkeypatch.setattr(ds, "_run", fake_run)
+    monkeypatch.setattr(ds, "audit", lambda *args, **kwargs: None)
+    result = ds.android_diagnostics("TEST123")
+    assert result["summary"]["battery"]["level_percent"] == 90
+    assert result["summary"]["data_storage"]["available"] == "44G"
+    assert result["summary"]["uptime"] == "up 2 days"
