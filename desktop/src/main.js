@@ -32,6 +32,32 @@ $("repairDevice").addEventListener("change",loadIdentity);
 $("scanBtn").onclick=$("refreshBtn").onclick=$("repairScanBtn").onclick=$("headerScan").onclick=scan;$("readinessBtn").onclick=readiness;
 $("propsBtn").onclick=()=>selectedAction("/api/android/properties");$("diagBtn").onclick=()=>selectedAction("/api/android/diagnostics");$("classifyBtn").onclick=()=>selectedAction("/api/android/classify");
 $("rebootBtn").onclick=async()=>{const serial=$("repairDevice").value,target=$("rebootTarget").value;if(!serial){output("repairOutput","Select an authorised Android device first.");return;}try{output("repairOutput","Verifying device and preparing approval…");const preview=await api("/api/operations/preview",{method:"POST",body:JSON.stringify({serial,operation:"reboot",target})});const p=preview.device||{};const summary="DEVICE-CHANGE APPROVAL\\nDevice: "+(p["ro.product.manufacturer"]||"Unknown")+" "+(p["ro.product.model"]||"Unknown")+"\\nSerial: "+serial+"\\nAction: Reboot to "+target+"\\n\\nThis approval applies only to this device and this action, expires in 2 minutes and can be used once. Continue?";if(!window.confirm(summary)){output("repairOutput","Operation cancelled. No device command was sent.");return;}const approved=await api("/api/operations/approve",{method:"POST",body:JSON.stringify({challenge_id:preview.challenge_id})});output("repairOutput","Approval recorded. Sending the approved reboot…");const result=await api("/api/android/reboot",{method:"POST",body:JSON.stringify({serial,target,approval_token:approved.approval_token})});output("repairOutput",result);}catch(e){output("repairOutput","Reboot not performed: "+e.message);}};
+$("flashCapabilitiesBtn").onclick=async()=>{
+ try {
+  const r=await api("/api/firmware/flash/capabilities");
+  const lines=["FIRMWARE FLASHING ENGINE READINESS","Customer approval required: "+r.approval_required,"Global write enabled: "+r.global_write_enabled,"Execution policy: "+r.execution_policy,"",...Object.entries(r.engines||{}).flatMap(([id,e])=>[id.toUpperCase(),e.label+" · "+e.status,"Write enabled: "+e.write_enabled,e.reason||"",...(e.supported_models||[]).map(x=>"Supported model: "+x),""]), "REQUIRED SAFETY GATES",...(r.required_gates||[]).map((x,i)=>(i+1)+". "+x)];
+  output("repairOutput",lines.join("\n"));
+  $("flashExecuteBtn").disabled=true;
+  $("flashExecuteBtn").textContent="Flash device (locked)";
+ } catch(e){output("repairOutput","Could not read flash readiness: "+e.message);}
+};
+$("flashPlanBtn").onclick=async()=>{
+ const serial=$("repairDevice").value;
+ const firmware_path=$("firmwarePath").value.trim();
+ const engine_id=$("flashEngine").value;
+ if(!serial){output("repairOutput","Select a device before preparing a flash plan.");return;}
+ if(!firmware_path){output("repairOutput","Enter the firmware ZIP path and inspect it before preparing a plan.");return;}
+ try {
+  output("repairOutput","Checking engine, device and firmware gates. No write command will be sent.");
+  const r=await api("/api/firmware/flash/plan",{method:"POST",body:JSON.stringify({serial,firmware_path,engine_id})});
+  const lines=["FLASH PLAN REVIEW","Flash enabled: "+r.flash_enabled,"Customer approval required: "+r.approval_required,"Device serial: "+r.serial,"Engine: "+(r.engine?.label||engine_id),"Engine status: "+(r.engine?.status||"unknown"),"","FIRMWARE",JSON.stringify(r.firmware||{},null,2),"","PARTITION PLAN",JSON.stringify(r.partition_plan||[],null,2),"","BLOCKERS",...(r.blockers||[]).map(x=>"• "+x),"",r.message||""];
+  output("repairOutput",lines.join("\n"));
+  $("flashExecuteBtn").disabled=true;
+  $("flashExecuteBtn").textContent="Flash device (locked)";
+ } catch(e){output("repairOutput","Flash plan rejected: "+e.message);}
+};
+$("flashExecuteBtn").disabled=true;
+$("flashExecuteBtn").title="Locked until a validated manufacturer engine and approved exact flash plan are available.";
 $("firmwareBtn").onclick=async()=>{try{const path=$("firmwarePath").value.trim();if(!path)throw new Error("Enter the full path to a firmware ZIP file.");output("repairOutput",await api("/api/firmware/inspect",{method:"POST",body:JSON.stringify({path})}));}catch(e){output("repairOutput",e.message);}};
 $("factoryResetPrepareBtn").onclick=async()=>{const serial=$("repairDevice").value;if(!serial){output("repairOutput","Select an authorised Android device first.");return;}if(!$("resetBackupAck").checked){output("repairOutput","Confirm that important data is backed up before proceeding.");return;}const confirmation=window.prompt('Type PREPARE RECOVERY to confirm:');if(confirmation===null)return;try{output("repairOutput","Verifying device and preparing approval…");const preview=await api("/api/operations/preview",{method:"POST",body:JSON.stringify({serial,operation:"factory_reset_prepare",backup_confirmed:true,confirmation})});const p=preview.device||{};const summary="RECOVERY PREPARATION APPROVAL\\nDevice: "+(p["ro.product.manufacturer"]||"Unknown")+" "+(p["ro.product.model"]||"Unknown")+"\\nSerial: "+serial+"\\nAction: Reboot into Recovery Mode\\nBackup confirmed: Yes\\n\\nVendora will NOT erase data. This approval is single-use and expires in 2 minutes. Continue?";if(!window.confirm(summary)){output("repairOutput","Operation cancelled. No device command was sent.");return;}const approved=await api("/api/operations/approve",{method:"POST",body:JSON.stringify({challenge_id:preview.challenge_id})});const result=await api("/api/android/factory-reset/prepare",{method:"POST",body:JSON.stringify({serial,backup_confirmed:true,confirmation,approval_token:approved.approval_token})});output("repairOutput",result);}catch(e){output("repairOutput","Recovery preparation not performed: "+e.message);}};
 $("bootAssessBtn").onclick=async()=>{
