@@ -113,12 +113,52 @@ def inspect_firmware_zip(path: str) -> dict[str, Any]:
     except zipfile.BadZipFile: raise ValueError("The selected file is not a valid ZIP archive")
 
 def iphone_status() -> dict[str, Any]:
+    """Discover iOS devices through the optional pymobiledevice3 CLI without pairing."""
+    executable = shutil.which("pymobiledevice3")
+    if not executable:
+        return {
+            "supported_library_installed": False,
+            "devices": [],
+            "count": 0,
+            "message": "pymobiledevice3 CLI not found. Install it and the Apple Mobile Device support service to enable iPhone discovery.",
+        }
+    result = _run([executable, "usbmux", "list"], timeout=20)
+    if not result["ok"]:
+        return {
+            "supported_library_installed": True,
+            "devices": [],
+            "count": 0,
+            "message": result.get("stderr") or result.get("error") or "iPhone discovery failed. Check Apple Mobile Device Service and USB connection.",
+        }
     try:
-        import pymobiledevice3  # noqa: F401
-        installed = True
-    except Exception: installed = False
-    return {"supported_library_installed": installed, "message": "Optional iPhone tooling is installed; device discovery is not yet implemented." if installed else "Install pymobiledevice3 to enable future iPhone integration."}
-
+        raw_devices = json.loads(result.get("stdout") or "[]")
+        if not isinstance(raw_devices, list):
+            raise ValueError("Unexpected device-list format")
+        devices = []
+        for item in raw_devices:
+            if not isinstance(item, dict):
+                continue
+            devices.append({
+                "udid": str(item.get("Identifier") or item.get("UniqueDeviceID") or ""),
+                "name": str(item.get("DeviceName") or "Apple device"),
+                "device_class": str(item.get("DeviceClass") or ""),
+                "model": str(item.get("ProductType") or ""),
+                "ios_version": str(item.get("ProductVersion") or ""),
+                "connection": str(item.get("ConnectionType") or ""),
+            })
+        return {
+            "supported_library_installed": True,
+            "devices": devices,
+            "count": len(devices),
+            "message": "Device discovery completed. No pairing or device changes were requested.",
+        }
+    except (json.JSONDecodeError, ValueError):
+        return {
+            "supported_library_installed": True,
+            "devices": [],
+            "count": 0,
+            "message": "pymobiledevice3 returned an unexpected device-list format.",
+        }
 def recovery_guidance(platform: str) -> list[str]:
     if platform == "android": return ["Confirm the owner can unlock the device and has backed up important data.", "Record the exact manufacturer, model number, region and build before choosing firmware.", "Try the manufacturer's documented restart and recovery procedure first.", "Use only signed firmware intended for the exact model and region.", "If Factory Reset Protection appears, recover the previously synced Google account; do not bypass it."]
     if platform == "ios": return ["Confirm ownership and check that a current backup exists.", "Use Apple's official recovery-mode update/restore instructions for the exact device.", "A restore can erase data; explain this before proceeding.", "Activation Lock requires the linked Apple Account or Apple's ownership-support process."]
