@@ -295,3 +295,31 @@ def test_unknown_usb_vendor_is_not_guessed():
     result = ds.classify_usb_interface(r"USB\\VID_FFFF&PID_0001\\ABC", "Unknown device")
     assert result["protocol_family"] == "unknown"
     assert result["brand_hint"] is None
+
+def test_accessible_media_export_pulls_only_shared_storage(monkeypatch, tmp_path):
+    commands = []
+    def fake_run(command, timeout=12):
+        commands.append(command)
+        if command[-1] == "get-state":
+            return {"ok": True, "stdout": "device", "stderr": ""}
+        if "test" in command:
+            return {"ok": command[-1] in ("/sdcard/DCIM", "/sdcard/Pictures"), "stdout": "", "stderr": ""}
+        if "pull" in command:
+            return {"ok": True, "stdout": "2 files pulled", "stderr": ""}
+        raise AssertionError(command)
+    monkeypatch.setattr(ds, "_run", fake_run)
+    monkeypatch.setattr(ds, "audit", lambda *args, **kwargs: None)
+    result = ds.backup_accessible_media("TEST123", str(tmp_path / "backup"))
+    assert result["ok"] is True
+    assert [x["folder"] for x in result["copied"]] == ["DCIM", "Pictures"]
+    assert set(result["skipped"]) == {"Movies", "Music", "Download"}
+    assert all("/sdcard/" in " ".join(command) for command in commands if "pull" in command)
+    assert not any("data/data" in " ".join(command) for command in commands)
+
+
+def test_accessible_media_export_requires_authorised_adb(monkeypatch, tmp_path):
+    monkeypatch.setattr(ds, "_run", lambda command, timeout=12: {
+        "ok": True, "stdout": "unauthorized", "stderr": ""
+    })
+    with pytest.raises(ValueError, match="not authorised"):
+        ds.backup_accessible_media("TEST123", str(tmp_path / "backup"))
