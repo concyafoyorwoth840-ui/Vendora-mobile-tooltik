@@ -308,9 +308,50 @@ def unlock_workflow_guidance(workflow: str) -> dict[str, Any]:
         audit("frp_owner_recovery_guidance_opened", {"workflow": workflow, "credentials_collected": False})
     return workflows[workflow]
 
+def classify_usb_interface(instance_id: str = "", friendly_name: str = "", device_class: str = "") -> dict[str, Any]:
+    """Conservatively classify a Windows USB interface from its reported PnP identity.
+
+    USB IDs identify an interface/vendor, not a handset model. Only Qualcomm's
+    well-known 05C6:9008 ID is labelled EDL; MediaTek and Samsung are reported
+    as possible vendor interfaces unless the Windows name states the mode.
+    """
+    raw = " ".join((instance_id, friendly_name, device_class))
+    upper = raw.upper()
+    match = re.search(r"VID_([0-9A-F]{4})&PID_([0-9A-F]{4})", upper)
+    vid, pid = (match.group(1), match.group(2)) if match else ("", "")
+    base = {
+        "vendor_id": vid or None, "product_id": pid or None,
+        "protocol_family": "unknown", "mode": "unknown_usb_mode",
+        "confidence": "low", "brand_hint": None,
+        "model_identified": False,
+    }
+    if vid == "05C6" and pid == "9008":
+        return {**base, "protocol_family": "qualcomm_edl", "mode": "edl_9008",
+                "confidence": "high", "brand_hint": "Qualcomm chipset (phone brand unknown)"}
+    if vid == "0E8D":
+        named_preloader = any(x in upper for x in ("PRELOADER", "VCOM", "BOOTROM", "BROM"))
+        return {**base, "protocol_family": "mediatek_usb",
+                "mode": "possible_preloader_or_bootrom" if named_preloader else "mediatek_usb_interface",
+                "confidence": "medium" if named_preloader else "low",
+                "brand_hint": "MediaTek interface (phone brand and model unknown)"}
+    if vid == "04E8":
+        named_download = "DOWNLOAD MODE" in upper or "ODIN" in upper
+        return {**base, "protocol_family": "samsung_usb",
+                "mode": "download_mode_candidate" if named_download else "samsung_usb_interface",
+                "confidence": "medium" if named_download else "low",
+                "brand_hint": "Samsung USB interface (exact mode/model unconfirmed)"}
+    if any(x in upper for x in ("ANDROID BOOTLOADER", "FASTBOOT")):
+        return {**base, "protocol_family": "android_fastboot", "mode": "fastboot_candidate",
+                "confidence": "medium", "brand_hint": "Android device (brand/model unknown)"}
+    if any(x in upper for x in ("ANDROID ADB", "ANDROID COMPOSITE")):
+        return {**base, "protocol_family": "android_usb", "mode": "android_usb_interface",
+                "confidence": "low", "brand_hint": "Android USB interface (ADB authorisation not confirmed)"}
+    return base
+
+
 def windows_usb_inventory() -> dict[str, Any]:
     if os.name != "nt": return {"supported": False, "devices": [], "message": "Windows USB inventory is available only on Windows."}
-    # Include composite USB interfaces and Windows portable-device (MTP/WPD) nodes.
+    # Include USB interfaces (including transient preloader/EDL nodes) and WPD/MTP nodes.
     # Inventory only: this never installs drivers or changes device state.
     script = "Get-PnpDevice -PresentOnly | Where-Object { $_.InstanceId -match '^(USB|USBSTOR)\\\\' -or $_.InstanceId -like 'SWD\\\\WPDBUSENUM*' } | Select-Object Status,Class,FriendlyName,InstanceId | ConvertTo-Json -Compress"
     result = _run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], timeout=20)
@@ -318,7 +359,22 @@ def windows_usb_inventory() -> dict[str, Any]:
     try:
         data = json.loads(result["stdout"] or "[]")
         if isinstance(data, dict): data = [data]
-        return {"supported": True, "devices": data, "count": len(data)}
+        devices = []
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            row = dict(item)
+            row["detection"] = classify_usb_interface(
+                str(row.get("InstanceId") or ""),
+                str(row.get("FriendlyName") or row.get("Name") or ""),
+                str(row.get("Class") or ""),
+            )
+            devices.append(row)
+        detected = [x for x in devices if x["detection"]["protocol_family"] != "unknown"]
+        audit("usb_inventory_scanned", {"device_count": len(devices), "protocol_candidates": len(detected)})
+        return {"supported": True, "devices": devices, "count": len(devices),
+                "protocol_candidates": detected,
+                "message": "USB interfaces classified conservatively. A USB match does not identify the exact handset model or prove a usable service session."}
     except json.JSONDecodeError: return {"supported": True, "devices": [], "message": "Windows returned an unreadable device inventory."}
 
 def readiness_report() -> dict[str, Any]:
