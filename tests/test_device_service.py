@@ -261,3 +261,37 @@ def test_boot_repair_fastboot_reads_identity_without_modifying_device(monkeypatc
     assert len(commands) == 4
     assert all("getvar" in c for c in commands)
     assert not any(any(x in c for x in ("flash", "erase", "format", "reboot", "unlock")) for c in commands)
+
+
+def test_usb_interface_detects_qualcomm_edl_without_guessing_phone_model():
+    result = ds.classify_usb_interface(
+        r"USB\\VID_05C6&PID_9008\\1234", "Qualcomm HS-USB QDLoader 9008", "Ports"
+    )
+    assert result["protocol_family"] == "qualcomm_edl"
+    assert result["mode"] == "edl_9008"
+    assert result["confidence"] == "high"
+    assert result["model_identified"] is False
+
+
+def test_usb_interface_reports_mediatek_as_candidate_not_exact_model():
+    result = ds.classify_usb_interface(
+        r"USB\\VID_0E8D&PID_2000\\ABC", "MediaTek PreLoader USB VCOM", "Ports"
+    )
+    assert result["protocol_family"] == "mediatek_usb"
+    assert result["mode"] == "possible_preloader_or_bootrom"
+    assert result["model_identified"] is False
+
+
+def test_usb_interface_does_not_claim_samsung_download_mode_without_evidence():
+    result = ds.classify_usb_interface(
+        r"USB\\VID_04E8&PID_6860\\ABC", "Samsung Mobile USB Composite Device", "USB"
+    )
+    assert result["protocol_family"] == "samsung_usb"
+    assert result["mode"] == "samsung_usb_interface"
+    assert result["confidence"] == "low"
+
+
+def test_unknown_usb_vendor_is_not_guessed():
+    result = ds.classify_usb_interface(r"USB\\VID_FFFF&PID_0001\\ABC", "Unknown device")
+    assert result["protocol_family"] == "unknown"
+    assert result["brand_hint"] is None
