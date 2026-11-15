@@ -19,7 +19,7 @@ jobs:
           node-version: "20"
 
       - name: Install backend dependencies and PyInstaller
-        run: py -3 -m pip install -r backend/requirements.txt pyinstaller
+        run: py -3 -m pip install -r backend/requirements.txt -r backend/requirements-dev.txt pyinstaller
 
       - name: Run automated tests
         run: py -3 -m pytest -q
