@@ -51,8 +51,19 @@ def audit(action: str, details: dict[str, Any]) -> None:
         # The operation result remains available; the audit failure is intentionally non-fatal.
         return
 
+def _tool_path(name: str) -> str:
+    """Prefer platform-tools shipped with the installer; fall back to the user's PATH."""
+    bundled_dir = os.environ.get("VENDORA_PLATFORM_TOOLS", "").strip()
+    if bundled_dir:
+        candidate = Path(bundled_dir) / (f"{name}.exe" if os.name == "nt" else name)
+        if candidate.is_file():
+            return str(candidate)
+    return shutil.which(name) or name
+
+
 def tool_status() -> dict[str, bool]:
-    return {name: shutil.which(name) is not None for name in ("adb", "fastboot")}
+    return {name: Path(_tool_path(name)).is_file() if Path(_tool_path(name)).is_absolute() else shutil.which(name) is not None
+            for name in ("adb", "fastboot")}
 
 def _parse_adb_devices(output: str) -> list[dict[str, str]]:
     devices = []
@@ -71,7 +82,7 @@ def _parse_fastboot_devices(output: str) -> list[dict[str, str]]:
     return devices
 
 def discover_android() -> dict[str, Any]:
-    adb, fastboot = _run(["adb", "devices"]), _run(["fastboot", "devices"])
+    adb, fastboot = _run([_tool_path("adb"), "devices"]), _run([_tool_path("fastboot"), "devices"])
     return {"adb_available": tool_status()["adb"], "fastboot_available": tool_status()["fastboot"],
         "adb": _parse_adb_devices(adb.get("stdout", "")) if adb["ok"] else [],
         "fastboot": _parse_fastboot_devices(fastboot.get("stdout", "")) if fastboot["ok"] else [],
@@ -82,7 +93,7 @@ def _valid_serial(serial: str) -> bool:
 
 def android_properties(serial: str) -> dict[str, Any]:
     if not _valid_serial(serial): raise ValueError("Invalid device serial")
-    result = _run(["adb", "-s", serial, "shell", "getprop"])
+    result = _run([_tool_path("adb"), "-s", serial, "shell", "getprop"])
     if not result["ok"]: return result
     props = {}
     for line in result["stdout"].splitlines():
@@ -150,7 +161,7 @@ def android_diagnostics(serial: str) -> dict[str, Any]:
 def reboot_android(serial: str, target: str) -> dict[str, Any]:
     if target not in SAFE_REBOOT_TARGETS: raise ValueError("Unsupported reboot target")
     if not _valid_serial(serial): raise ValueError("Invalid device serial")
-    result = _run(["adb", "-s", serial, "reboot", target])
+    result = _run([_tool_path("adb"), "-s", serial, "reboot", target])
     audit("android_reboot", {"serial": serial, "target": target, "ok": result["ok"]})
     return result
 
