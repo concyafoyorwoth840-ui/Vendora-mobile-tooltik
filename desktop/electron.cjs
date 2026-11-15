@@ -11,7 +11,6 @@ let mainWindow = null;
 let quitting = false;
 let restartCount = 0;
 let restartTimer = null;
-let logStream = null;
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
@@ -204,10 +203,6 @@ app.on("before-quit", () => {
   clearTimeout(restartTimer);
   if (backend && !backend.killed) {
     try { backend.kill(); } catch (error) { log(`Backend shutdown error: ${error.message}`); }
-  }
-  if (logStream) {
-    try { logStream.end(); } catch (_) {}
-    logStream = null;
   }
 });
 app.on("window-all-closed", () => {
