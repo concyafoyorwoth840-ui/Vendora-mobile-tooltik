@@ -43,3 +43,28 @@ def test_readiness_endpoint():
 def test_usb_inventory_endpoint():
     response = client.get("/api/devices/usb")
     assert response.status_code == 200
+
+def test_screen_lock_workflow_is_guidance_only():
+    response = client.get("/api/recovery/workflows/screen_lock")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "OFFICIAL_RECOVERY_GUIDANCE"
+    assert any("does not remove PINs" in item for item in body["limitations"])
+
+def test_carrier_unlock_workflow_does_not_claim_to_generate_codes():
+    response = client.get("/api/recovery/workflows/carrier_unlock")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "CARRIER_AUTHORISED_PROCESS"
+    assert any("cannot query carrier eligibility" in item for item in body["limitations"])
+
+def test_bootloader_unlock_workflow_requires_oem_compatibility():
+    response = client.get("/api/recovery/workflows/bootloader_unlock")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "OEM_COMPATIBILITY_CHECK_REQUIRED"
+    assert any("generic fastboot unlock command" in item for item in body["limitations"])
+
+def test_unknown_unlock_workflow_rejected():
+    response = client.get("/api/recovery/workflows/not-a-workflow")
+    assert response.status_code == 400
