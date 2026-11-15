@@ -51,3 +51,34 @@ def test_usb_inventory_is_graceful_off_windows(monkeypatch):
     monkeypatch.setattr(ds.os, "name", "posix")
     result = ds.windows_usb_inventory()
     assert result["supported"] is False
+
+
+def test_iphone_status_parses_discovered_devices(monkeypatch):
+    monkeypatch.setattr(ds.shutil, "which", lambda name: "/tools/pymobiledevice3.exe")
+    monkeypatch.setattr(ds, "_run", lambda command, timeout=12: {
+        "ok": True,
+        "stdout": '[{"Identifier":"00008030ABC","DeviceName":"Test iPhone","DeviceClass":"iPhone","ProductType":"iPhone15,2","ProductVersion":"17.5","ConnectionType":"USB"}]',
+        "stderr": ""
+    })
+    result = ds.iphone_status()
+    assert result["count"] == 1
+    assert result["devices"][0]["name"] == "Test iPhone"
+    assert result["devices"][0]["model"] == "iPhone15,2"
+
+
+def test_iphone_status_reports_missing_cli(monkeypatch):
+    monkeypatch.setattr(ds.shutil, "which", lambda name: None)
+    result = ds.iphone_status()
+    assert result["supported_library_installed"] is False
+    assert result["devices"] == []
+
+
+def test_iphone_status_handles_usbmux_failure(monkeypatch):
+    monkeypatch.setattr(ds.shutil, "which", lambda name: "/tools/pymobiledevice3.exe")
+    monkeypatch.setattr(ds, "_run", lambda command, timeout=12: {
+        "ok": False, "stderr": "Apple Mobile Device Service unavailable"
+    })
+    result = ds.iphone_status()
+    assert result["supported_library_installed"] is True
+    assert result["count"] == 0
+    assert "Apple Mobile Device Service" in result["message"]
