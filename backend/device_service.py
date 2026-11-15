@@ -235,6 +235,23 @@ def recovery_guidance(platform: str) -> list[str]:
 def unlock_workflow_guidance(workflow: str) -> dict[str, Any]:
     """Return safe, official owner-recovery steps; never claims to unlock a device."""
     workflows = {
+        "frp_recovery": {
+            "title": "Android Factory Reset Protection (FRP) owner recovery",
+            "status": "OWNER_VERIFICATION_AND_OFFICIAL_ACCOUNT_RECOVERY",
+            "steps": [
+                "Confirm the customer is the device owner or has documented authority to service it. Record the service case and the exact make/model; do not collect or store Google passwords or one-time codes.",
+                "Explain that FRP is an anti-theft protection that can appear after a protected Android device is reset. It is not the same as a SIM/network lock or screen lock.",
+                "Ask the owner to complete setup using a Google Account that was previously added and synced on this device, following the on-screen prompts.",
+                "If the owner cannot sign in, help them use Google's official account-recovery process on a trusted device. If the password was recently changed, follow Google's on-screen security waiting period rather than repeatedly resetting the phone.",
+                "If the owner cannot recover the account, refer them to the device manufacturer or an authorised service centre with the original proof of purchase and ownership documents.",
+                "After the owner completes the official verification process, continue normal device setup. Record the service outcome without recording account credentials."
+            ],
+            "limitations": [
+                "Vendora does not bypass, disable, exploit or remove FRP, Google account verification or any anti-theft protection.",
+                "This release provides an owner-verification checklist and official recovery guidance only; no manufacturer FRP-removal integration is connected.",
+                "Never ask a customer to disclose their Google password, recovery codes or one-time verification codes to the technician."
+            ]
+        },
         "screen_lock": {
             "title": "Forgotten Android screen-lock recovery",
             "status": "OFFICIAL_RECOVERY_GUIDANCE",
@@ -286,6 +303,8 @@ def unlock_workflow_guidance(workflow: str) -> dict[str, Any]:
     }
     if workflow not in workflows:
         raise ValueError("Unknown recovery workflow")
+    if workflow == "frp_recovery":
+        audit("frp_owner_recovery_guidance_opened", {"workflow": workflow, "credentials_collected": False})
     return workflows[workflow]
 
 def windows_usb_inventory() -> dict[str, Any]:
