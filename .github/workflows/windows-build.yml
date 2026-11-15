@@ -1,0 +1,31 @@
+name: Windows installer
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install backend dependencies and PyInstaller
+        run: py -3 -m pip install -r backend/requirements.txt pyinstaller
+      - name: Package backend
+        working-directory: backend
+        run: py -3 -m PyInstaller --noconfirm --clean --onefile --name VendoraBackend --collect-all fastapi --collect-all uvicorn --collect-all pydantic app.py
+      - name: Install desktop dependencies
+        working-directory: desktop
+        run: npm install
+      - name: Build Windows NSIS installer
+        working-directory: desktop
+        run: npm run dist:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Vendora-Mobile-Toolkit-Windows-Installer
+          path: desktop/release/*.exe
