@@ -32,3 +32,4 @@ jobs:
         run: |
           node --check desktop/electron.cjs
           node --check desktop/src/main.js
+          node --check desktop/build.cjs
