@@ -37,6 +37,15 @@ class BootRepairAssessmentRequest(BaseModel):
     serial: str = Field(default="", max_length=128)
     symptom: str = Field(default="stuck_logo", max_length=32)
 
+class RepairPlanRequest(BootRepairAssessmentRequest):
+    firmware_path: str = Field(default="", max_length=2048)
+    programmer_path: str = Field(default="", max_length=2048)
+
+@app.post("/api/repair/prepare")
+def repair_prepare(req: RepairPlanRequest):
+    try: return build_repair_plan(req.serial, req.symptom, req.firmware_path, req.programmer_path)
+    except ValueError as e: raise HTTPException(400, str(e))
+
 @app.post("/api/boot-repair/assess")
 def boot_repair_assess(req: BootRepairAssessmentRequest):
     try: return assess_boot_repair(req.serial, req.symptom)
