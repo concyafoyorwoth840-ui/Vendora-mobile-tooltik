@@ -18,6 +18,12 @@ The System Repair workspace includes an ADB-based **Shared media backup** operat
 
 USB inventory also classifies known interface candidates (including Qualcomm 9008, possible MediaTek preloader/BootROM and Samsung Download Mode candidates) conservatively. A USB vendor/product ID is not proof of the exact phone model or a working manufacturer service session.
 
+## Working Android media restore
+The System Repair workspace includes a matching **Restore media backup** operation. It accepts a local folder containing one or more of DCIM, Pictures, Movies, Music and Download, checks that the selected phone is authorised and online, then copies the selected folders into a new `Vendora_Restore_YYYYMMDD_HHMMSS` directory on the phone. It does not overwrite the phone's existing standard media folders and does not restore applications, WhatsApp chats, messages, accounts, settings or private app data.
+
+## Working Android phone-to-phone shared-media transfer
+With two Android phones authorised and online in ADB, **Phone Transfer** copies accessible DCIM, Pictures, Movies, Music and Download folders through a temporary local staging directory into a new `Vendora_Transfer_YYYYMMDD_HHMMSS` folder on the destination phone. This is a shared-file transfer only, not full phone cloning or app/chat migration.
+
 ## Recovery workflow scope
 These are guided owner-recovery workflows, not universal automated unlock engines.
 - **FRP:** ownership-verification checklist, previously synced Google Account recovery guidance and authorised manufacturer/service-centre referral. Vendora does not bypass or disable FRP and never collects account passwords or verification codes.
