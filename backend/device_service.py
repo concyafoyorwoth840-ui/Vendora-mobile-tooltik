@@ -145,8 +145,8 @@ def _parse_data_storage(output: str) -> dict[str, str]:
 
 def android_diagnostics(serial: str) -> dict[str, Any]:
     if not _valid_serial(serial): raise ValueError("Invalid device serial")
-    commands = {"battery": ["adb", "-s", serial, "shell", "dumpsys", "battery"],
-        "storage": ["adb", "-s", serial, "shell", "df", "-h", "/data"], "uptime": ["adb", "-s", serial, "shell", "uptime"]}
+    commands = {"battery": [_tool_path("adb"), "-s", serial, "shell", "dumpsys", "battery"],
+        "storage": [_tool_path("adb"), "-s", serial, "shell", "df", "-h", "/data"], "uptime": [_tool_path("adb"), "-s", serial, "shell", "uptime"]}
     results = {name: _run(cmd) for name, cmd in commands.items()}
     summary: dict[str, Any] = {}
     if results["battery"]["ok"]:
