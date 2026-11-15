@@ -25,16 +25,32 @@ if (!hasSingleInstanceLock) {
   });
 }
 
+const MAX_LOG_BYTES = 2 * 1024 * 1024;
+
 function log(message) {
-  const line = `[${new Date().toISOString()}] ${message}\n`;
+  const line = `[${new Date().toISOString()}] ${String(message)}\n`;
   try {
-    if (!logStream) {
-      const logDir = path.join(app.getPath("userData"), "logs");
-      fs.mkdirSync(logDir, { recursive: true });
-      logStream = fs.createWriteStream(path.join(logDir, "vendora.log"), { flags: "a" });
-    logStream.on("error", () => { logStream = null; });
+    const logDir = path.join(app.getPath("userData"), "logs");
+    const logPath = path.join(logDir, "vendora.log");
+    fs.mkdirSync(logDir, { recursive: true });
+
+    // Keep logs bounded and synchronously flush each small record so a sudden
+    // shutdown is less likely to lose the latest diagnostic information.
+    try {
+      if (fs.existsSync(logPath) && fs.statSync(logPath).size + Buffer.byteLength(line) > MAX_LOG_BYTES) {
+        const previous = logPath + ".1";
+        try { fs.rmSync(previous, { force: true }); } catch (_) {}
+        fs.renameSync(logPath, previous);
+      }
+    } catch (_) {}
+
+    const fd = fs.openSync(logPath, "a");
+    try {
+      fs.writeSync(fd, line, null, "utf8");
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
     }
-    logStream.write(line);
   } catch (_) {
     // Logging must never crash the application.
   }
@@ -165,6 +181,22 @@ app.whenReady().then(async () => {
 }).catch(error => {
   log(`Application startup failed: ${error.stack || error.message}`);
   dialog.showErrorBox("Vendora Mobile Toolkit", "Vendora could not start. Please restart the application.");
+});
+
+ 
+process.on("uncaughtException", error => {
+  log(`Uncaught exception: ${error && (error.stack || error.message) || error}`);
+  if (!quitting) {
+    quitting = true;
+    try {
+      dialog.showErrorBox("Vendora Mobile Toolkit", "Vendora encountered an unexpected error. Diagnostic details were saved in the application logs. Please reopen the application.");
+    } catch (_) {}
+    app.quit();
+  }
+});
+
+process.on("unhandledRejection", reason => {
+  log(`Unhandled promise rejection: ${reason && (reason.stack || reason.message) || reason}`);
 });
 
 app.on("before-quit", () => {
