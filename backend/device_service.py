@@ -443,3 +443,87 @@ def execute_approved_reboot(serial: str, target: str, approval_token: str) -> di
     audit("operation_completed" if result.get("ok") else "operation_failed",
           {**expected, "returncode": result.get("returncode")})
     return result
+
+
+def assess_boot_repair(serial: str = "", symptom: str = "stuck_logo") -> dict[str, Any]:
+    """Read-only boot-failure assessment. Never wipes, flashes, unlocks or reboots a phone."""
+    allowed = {"stuck_logo", "boot_loop", "failed_update", "recovery_mode", "black_screen"}
+    if symptom not in allowed:
+        raise ValueError("Unsupported boot symptom")
+    if serial and not _valid_serial(serial):
+        raise ValueError("Invalid device serial")
+    found = discover_android()
+    adb_rows = found.get("adb", [])
+    fastboot_rows = found.get("fastboot", [])
+    selected_adb = next((x for x in adb_rows if x.get("serial") == serial), None) if serial else None
+    selected_fastboot = next((x for x in fastboot_rows if x.get("serial") == serial), None) if serial else None
+    report: dict[str, Any] = {
+        "ok": True, "read_only": True, "symptom": symptom,
+        "detected": {"adb": adb_rows, "fastboot": fastboot_rows},
+        "device_mode": "not_detected",
+        "identity": {}, "diagnostics": {}, "assessment": "", "next_steps": [],
+        "limitations": [
+            "This assessment does not repair, wipe, flash, unlock or reboot the phone.",
+            "USB inventory alone is not proof that a bootloader, recovery or service protocol is usable.",
+            "A firmware repair engine is not implemented; never flash a package based only on a matching brand."
+        ]
+    }
+    if selected_adb and selected_adb.get("state") == "device":
+        report["device_mode"] = "android_adb"
+        identity = android_properties(serial)
+        report["identity"] = identity.get("properties", {})
+        report["identity_read_ok"] = bool(identity.get("ok"))
+        if identity.get("ok"):
+            profile = classify_android(
+                report["identity"].get("ro.product.manufacturer", ""),
+                report["identity"].get("ro.product.model", ""),
+                report["identity"].get("ro.product.device", ""),
+                report["identity"].get("ro.build.fingerprint", ""))
+            report["protocol_profile"] = profile
+            diag = android_diagnostics(serial)
+            report["diagnostics"] = diag.get("summary", {})
+        else:
+            report["identity_error"] = identity.get("error") or identity.get("stderr")
+    elif selected_adb:
+        report["device_mode"] = "adb_" + selected_adb.get("state", "unknown")
+    elif selected_fastboot:
+        report["device_mode"] = "fastboot"
+        for key in ("product", "version", "current-slot", "unlocked"):
+            value = _run([_tool_path("fastboot"), "-s", serial, "getvar", key], timeout=8)
+            report["identity"][key] = (value.get("stderr") or value.get("stdout") or "").strip()
+    elif not serial and (adb_rows or fastboot_rows):
+        report["device_mode"] = "multiple_devices_detected"
+    report["assessment"] = {
+        "stuck_logo": "A startup logo freeze is reported. If the phone is detected in ADB or Fastboot, Vendora can collect the read-only information above; otherwise use the exact model's official recovery instructions.",
+        "boot_loop": "Repeated restarts can be caused by a failed update, storage fault, battery/power issue or firmware problem. The available connection mode determines which diagnostics are possible.",
+        "failed_update": "An interrupted update may leave Android unable to boot. Do not flash a package until exact model, region, hardware revision and build compatibility are verified.",
+        "recovery_mode": "The phone is already reported to be in recovery. Read the on-device menu carefully; do not select factory reset or wipe unless the owner explicitly accepts permanent data loss.",
+        "black_screen": "A black screen may be display, power or boot failure. Check charging and physical condition first; USB detection alone cannot distinguish these causes."
+    }[symptom]
+    if report["device_mode"] == "android_adb":
+        report["next_steps"] = [
+            "Save the detected model, build fingerprint and diagnostic summary before attempting recovery.",
+            "Check available storage and battery condition in the report; investigate obvious power or storage faults.",
+            "Use only the manufacturer's documented, model-specific recovery procedure.",
+            "Back up accessible data before any repair that may alter partitions."
+        ]
+    elif report["device_mode"] == "fastboot":
+        report["next_steps"] = [
+            "Record the reported product and bootloader variables and verify them against the exact model and regional variant.",
+            "Do not issue unlock, erase, format or flash commands from this assessment.",
+            "Use the manufacturer's official service or recovery instructions for the verified model."
+        ]
+    elif report["device_mode"].startswith("adb_"):
+        report["next_steps"] = [
+            "ADB is present but not authorised/ready. If Android is usable, unlock it and approve this computer; a logo-stuck phone may not be able to do this.",
+            "Run a fresh scan in Recovery or Bootloader mode; do not assume an ADB session exists."
+        ]
+    else:
+        report["next_steps"] = [
+            "Try a fresh scan while the phone is in its own recovery or bootloader screen, using the manufacturer's documented button combination.",
+            "If Windows lists only a generic USB device, install only the official driver for the exact manufacturer/model and scan again.",
+            "Samsung Download Mode, Qualcomm EDL and MediaTek Preloader need separate validated detection and service engines; those engines are not active in this build."
+        ]
+    audit("boot_repair_assessment", {"serial": serial or None, "symptom": symptom,
+          "device_mode": report["device_mode"], "read_only": True})
+    return report
