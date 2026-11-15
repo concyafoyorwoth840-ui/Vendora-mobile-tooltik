@@ -113,7 +113,39 @@ def classify_android(manufacturer: str = "", model: str = "", device: str = "", 
     elif any(x in text for x in ("mediatek", "mtk", "mt67", "mt68", "dimensity", "helio")): key, label = "mediatek", "MediaTek-based Android (unconfirmed manufacturer)"
     elif any(x in text for x in ("xiaomi", "redmi", "poco")): key, label = "generic_android", "Xiaomi / Redmi / POCO"
     else: key, label = "generic_android", manufacturer.strip() or "Unknown Android manufacturer"
+    # Keep the retail brand separate from the low-level chipset/protocol family.
+    # TECNO, Infinix and itel commonly ship MediaTek hardware; reporting only
+    # "MediaTek" loses the manufacturer identity needed for model-specific support.
+    brand_text = " ".join((manufacturer, model, device, fingerprint)).lower()
+    if "samsung" in brand_text or re.search(r"\\bsm-[a-z0-9]+\\b", brand_text):
+        brand_key, brand_label = "samsung", "Samsung"
+    elif "tecno" in brand_text:
+        brand_key, brand_label = "tecno", "TECNO"
+    elif "infinix" in brand_text:
+        brand_key, brand_label = "infinix", "Infinix"
+    elif re.search(r"\\bitel\\b", brand_text):
+        brand_key, brand_label = "itel", "itel"
+    elif any(x in brand_text for x in ("xiaomi", "redmi", "poco")):
+        brand_key, brand_label = "xiaomi", "Xiaomi / Redmi / POCO"
+    elif "oppo" in brand_text:
+        brand_key, brand_label = "oppo", "OPPO"
+    elif "vivo" in brand_text:
+        brand_key, brand_label = "vivo", "vivo"
+    elif "realme" in brand_text:
+        brand_key, brand_label = "realme", "realme"
+    elif "motorola" in brand_text or "moto " in brand_text:
+        brand_key, brand_label = "motorola", "Motorola"
+    elif "nokia" in brand_text or "hmd" in brand_text:
+        brand_key, brand_label = "nokia", "Nokia / HMD"
+    elif "oneplus" in brand_text:
+        brand_key, brand_label = "oneplus", "OnePlus"
+    elif "google" in brand_text or "pixel" in brand_text:
+        brand_key, brand_label = "google", "Google Pixel"
+    else:
+        brand_key, brand_label = "unknown", manufacturer.strip() or "Unknown"
     return {"manufacturer_family": label, "protocol_profile": key, "protocols": MANUFACTURER_PROTOCOLS[key],
+        "brand_key": brand_key, "brand": brand_label,
+        "model": model.strip() or "Unknown", "model_exact": bool(model.strip()),
         "identification_confidence": "reported_properties" if text else "unknown"}
 
 def _parse_battery_diagnostics(output: str) -> dict[str, Any]:
