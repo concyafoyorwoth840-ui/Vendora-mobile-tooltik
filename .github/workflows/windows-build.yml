@@ -3,29 +3,74 @@ on:
   workflow_dispatch:
   push:
     tags: ["v*"]
+
 jobs:
   build:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+
       - name: Install backend dependencies and PyInstaller
         run: py -3 -m pip install -r backend/requirements.txt pyinstaller
+
+      - name: Run automated tests
+        run: py -3 -m pytest -q
+
+      - name: Check Electron JavaScript syntax
+        run: |
+          node --check desktop/electron.cjs
+          node --check desktop/src/main.js
+
       - name: Package backend
         working-directory: backend
-        run: py -3 -m PyInstaller --noconfirm --clean --onefile --name VendoraBackend --collect-all fastapi --collect-all uvicorn --collect-all pydantic app.py
+        run: py -3 -m PyInstaller --noconfirm --clean --onefile --name VendoraBackend --hidden-import device_service --collect-all fastapi --collect-all uvicorn --collect-all pydantic app.py
+
+      - name: Verify packaged backend executable
+        shell: pwsh
+        run: |
+          if (!(Test-Path "backend/dist/VendoraBackend.exe")) {
+            throw "VendoraBackend.exe was not created."
+          }
+
+      - name: Smoke-test packaged backend
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath "backend/dist/VendoraBackend.exe" -PassThru -WindowStyle Hidden
+          try {
+            $ready = $false
+            for ($i = 0; $i -lt 30; $i++) {
+              Start-Sleep -Seconds 1
+              try {
+                $response = Invoke-RestMethod -Uri "http://127.0.0.1:8765/api/health" -TimeoutSec 2
+                if ($response.ok -eq $true) { $ready = $true; break }
+              } catch {}
+            }
+            if (-not $ready) { throw "Packaged backend did not pass its HTTP health check." }
+          }
+          finally {
+            if ($process -and -not $process.HasExited) {
+              Stop-Process -Id $process.Id -Force
+            }
+          }
+
       - name: Install desktop dependencies
         working-directory: desktop
         run: npm install
+
       - name: Build Windows NSIS installer
         working-directory: desktop
         run: npm run dist:win
+
       - uses: actions/upload-artifact@v4
         with:
           name: Vendora-Mobile-Toolkit-Windows-Installer
           path: desktop/release/*.exe
+          if-no-files-found: error
