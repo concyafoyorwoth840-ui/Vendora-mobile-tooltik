@@ -414,3 +414,20 @@ def test_boot_repair_fastboot_collects_extended_read_only_identity(monkeypatch):
     assert report["identity"]["variant"] == "(bootloader) SM-G998W"
     assert report["identity"]["write_commands_sent"] is False
     assert all("getvar" in command for command in commands)
+
+
+def test_retail_brand_is_separate_from_chipset_protocol():
+    tecno = ds.classify_android("TECNO", "KI5q", "TECNO-KI5q", "TECNO/KI5q/MTK")
+    infinix = ds.classify_android("Infinix", "X6837", "Infinix-X6837", "Infinix/MTK")
+    itel = ds.classify_android("itel", "A70", "itel-A70", "itel/MTK")
+    assert tecno["brand_key"] == "tecno" and tecno["protocol_profile"] == "mediatek"
+    assert infinix["brand_key"] == "infinix" and infinix["protocol_profile"] == "mediatek"
+    assert itel["brand_key"] == "itel" and itel["protocol_profile"] == "mediatek"
+
+
+def test_samsung_a06_brand_and_model_are_reported_without_assuming_variant():
+    result = ds.classify_android("samsung", "Galaxy A06", "a06", "samsung/a06")
+    assert result["brand_key"] == "samsung"
+    assert result["model"] == "Galaxy A06"
+    assert result["model_exact"] is True
+    assert result["protocol_profile"] == "samsung"
