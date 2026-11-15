@@ -90,7 +90,7 @@ def build_repair_plan(serial: str = "", symptom: str = "stuck_logo",
                 identity = props.copy()
     elif fastboot:
         mode = "fastboot"
-        for key in ("product", "version", "current-slot", "unlocked"):
+        for key in ("product", "variant", "version", "bootloader-version", "current-slot", "slot-count", "unlocked", "secure", "is-userspace"):
             result = _run([_tool_path("fastboot"), "-s", serial, "getvar", key], timeout=8)
             identity[key] = (result.get("stderr") or result.get("stdout") or "").strip()
 
