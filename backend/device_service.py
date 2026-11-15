@@ -1,5 +1,5 @@
 from __future__ import annotations
-import hashlib, json, os, re, shutil, subprocess, zipfile
+import hashlib, json, os, re, shutil, subprocess, zipfile, secrets, threading, time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -159,12 +159,9 @@ def android_diagnostics(serial: str) -> dict[str, Any]:
     audit("android_diagnostics", {"serial": serial})
     return {"serial": serial, "summary": summary, "checks": results}
 
-def reboot_android(serial: str, target: str) -> dict[str, Any]:
-    if target not in SAFE_REBOOT_TARGETS: raise ValueError("Unsupported reboot target")
-    if not _valid_serial(serial): raise ValueError("Invalid device serial")
-    result = _run([_tool_path("adb"), "-s", serial, "reboot", target])
-    audit("android_reboot", {"serial": serial, "target": target, "ok": result["ok"]})
-    return result
+def reboot_android(serial: str, target: str, approval_token: str = "") -> dict[str, Any]:
+    """Device-changing reboot; a backend-issued, one-time approval is mandatory."""
+    return execute_approved_reboot(serial, target, approval_token)
 
 def inspect_firmware_zip(path: str) -> dict[str, Any]:
     p = Path(path).expanduser()
@@ -265,21 +262,21 @@ def readiness_report() -> dict[str, Any]:
         "Physical-device validation is required before claiming model compatibility."]}
 
 
-def prepare_factory_reset(serial: str, backup_confirmed: bool, confirmation: str) -> dict[str, Any]:
-    """Safely prepare a user-confirmed reset by entering stock recovery; never issues wipe commands."""
-    if not _valid_serial(serial):
-        raise ValueError("Invalid device serial")
-    if backup_confirmed is not True:
-        raise ValueError("Confirm that important data is backed up before continuing.")
-    if confirmation != "PREPARE RECOVERY":
-        raise ValueError('Type PREPARE RECOVERY exactly to confirm this operation.')
+def prepare_factory_reset(serial: str, backup_confirmed: bool, confirmation: str,
+                          approval_token: str = "") -> dict[str, Any]:
+    """Requires a one-time backend approval; enters recovery but never wipes data."""
+    expected = _approval_payload(serial, "factory_reset_prepare",
+                                 backup_confirmed=backup_confirmed, confirmation=confirmation)
     identity = android_properties(serial)
     if not identity.get("ok"):
         raise ValueError(identity.get("error") or "Unable to verify the selected Android device.")
-    result = reboot_android(serial, "recovery")
+    _consume_approval(approval_token, expected)
+    audit("operation_started", expected)
+    result = _perform_reboot_android(serial, "recovery")
     audit("factory_reset_recovery_preparation", {
         "serial": serial, "backup_confirmed": True, "reboot_ok": result.get("ok", False)
     })
+    audit("operation_completed" if result.get("ok") else "operation_failed", expected)
     return {
         "ok": bool(result.get("ok")),
         "stage": "recovery_preparation",
