@@ -1,17 +1,34 @@
-# Vendora Mobile Toolkit — v0.4 development source
+# Vendora Mobile Toolkit — Development Build 0.4
 
 Windows-first desktop service toolkit for owner-authorised Android and Apple device diagnostics and recovery guidance.
 
 ## Included
 - Electron desktop interface and local FastAPI backend.
-- Android ADB/Fastboot discovery and read-only diagnostics.
-- Exact-model compatibility catalogue with conservative `unverified` defaults.
-- Firmware ZIP integrity and SHA-256 inspection.
-- Safe reboot targets and recovery guidance.
-- Read-only protocol capability inventory for Android standard tools, Samsung USB/Download Mode, Qualcomm EDL, MediaTek Preloader, Apple Mobile Device/Recovery/DFU, and OEM USB families.
-- Automated tests included in the source package.
-- Windows x64 NSIS installer build scripts.
-- GitHub Actions workflow at `.github/workflows/windows-build.yml`.
+- Android ADB/Fastboot discovery, properties, diagnostics and safe reboot targets.
+- Firmware ZIP integrity and SHA-256 inspection (inspection only; no flashing).
+- Manufacturer readiness catalogue for Samsung, Google, Qualcomm, MediaTek, Apple and generic Android.
+- Conservative Android family classification from reported device properties.
+- Read-only Windows USB Plug-and-Play inventory endpoint.
+- Desktop readiness panel and automated tests.
+- Windows x64 NSIS installer build configuration and GitHub Actions workflow.
 
-## Build
-See the source package and workflow for build instructions. Manufacturer protocol entries are capability records and integration scaffolding, not completed proprietary repair engines. This version does not flash firmware, restore iOS, remove screen passcodes, bypass FRP or Activation Lock, or unlock bootloaders. Physical-device validation remains required. Unknown models remain `unverified`; do not claim universal compatibility.
+## Status and limitations
+Manufacturer protocol profiles are readiness records, not completed vendor flashing engines. Qualcomm EDL and MediaTek BootROM/Preloader servicing are not implemented. Samsung Download Mode servicing is not implemented. Apple discovery remains experimental. No firmware is automatically selected or flashed. No screen-lock, FRP, Activation Lock, account or bootloader bypass is provided. Physical-device validation is outstanding; unknown models must remain unverified.
+
+## API additions
+- GET /api/readiness — tool availability, protocol profiles and limitations.
+- GET /api/devices/usb — read-only Windows USB PnP inventory.
+- POST /api/android/classify — classify a connected Android device from its reported properties.
+
+## Tests
+Run from the project root: `python -m pytest -q`.
+
+## Windows installer
+The GitHub Actions workflow builds a Windows x64 NSIS installer. Open **Actions**, select **Windows installer**, and choose **Run workflow**, or push a `v*` tag. Download the resulting installer artifact.
+
+For a local Windows build with Python 3.11+ and Node.js 20+:
+1. Run `backend\build_windows.bat`.
+2. Run `npm install` inside `desktop`.
+3. Run `npm run dist:win` inside `desktop`.
+
+The workflow has been prepared but has not yet been executed on a Windows runner. No installer is claimed as built or verified yet.
