@@ -3,7 +3,8 @@ from pydantic import BaseModel, Field
 from device_service import (tool_status, discover_android, android_properties,
     android_diagnostics, reboot_android, inspect_firmware_zip, iphone_status,
     recovery_guidance, unlock_workflow_guidance, classify_android, windows_usb_inventory, readiness_report, prepare_factory_reset,
-    create_operation_preview, approve_operation, assess_boot_repair)\nfrom repair_planner import build_repair_plan
+    create_operation_preview, approve_operation, assess_boot_repair)
+from repair_planner import build_repair_plan
 
 app = FastAPI(title="Vendora Mobile Toolkit API", version="0.6.0")
 
