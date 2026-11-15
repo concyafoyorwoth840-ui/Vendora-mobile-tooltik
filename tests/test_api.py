@@ -70,16 +70,11 @@ def test_unknown_unlock_workflow_rejected():
     assert response.status_code == 400
 
 
-def test_frp_recovery_is_owner_guidance_not_bypass(monkeypatch):
-    events = []
-    monkeypatch.setattr(api, "unlock_workflow_guidance", lambda workflow: {
-        "title": "Android Factory Reset Protection (FRP) owner recovery",
-        "status": "OWNER_VERIFICATION_AND_OFFICIAL_ACCOUNT_RECOVERY",
-        "steps": ["Use the previously synced Google Account."],
-        "limitations": ["Vendora does not bypass FRP."]
-    } if workflow == "frp_recovery" else (_ for _ in ()).throw(ValueError("Unknown recovery workflow")))
+def test_frp_recovery_is_owner_guidance_not_bypass():
     response = client.get("/api/recovery/workflows/frp_recovery")
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "OWNER_VERIFICATION_AND_OFFICIAL_ACCOUNT_RECOVERY"
-    assert any("does not bypass FRP" in item for item in body["limitations"])
+    assert any("does not bypass" in item and "FRP" in item for item in body["limitations"])
+    assert any("previously added and synced" in item for item in body["steps"])
+    assert any("password" in item.lower() for item in body["limitations"])
