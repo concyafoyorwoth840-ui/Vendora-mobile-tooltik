@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from device_service import (tool_status, discover_android, android_properties,
-    android_diagnostics, backup_accessible_media, transfer_shared_media, reboot_android, inspect_firmware_zip, iphone_status,
+    android_diagnostics, backup_accessible_media, restore_accessible_media, transfer_shared_media, reboot_android, inspect_firmware_zip, iphone_status,
     recovery_guidance, unlock_workflow_guidance, classify_android, windows_usb_inventory, readiness_report, prepare_factory_reset,
     create_operation_preview, approve_operation, assess_boot_repair)
 from repair_planner import build_repair_plan
@@ -21,6 +21,9 @@ class FirmwareRequest(BaseModel):
 
 class MediaBackupRequest(DeviceRequest):
     destination: str = Field(min_length=1, max_length=2048)
+
+class MediaRestoreRequest(DeviceRequest):
+    source_folder: str = Field(min_length=1, max_length=2048)
 
 class PhoneTransferRequest(BaseModel):
     source_serial: str = Field(min_length=1, max_length=128)
@@ -112,6 +115,11 @@ def diagnostics(req: DeviceRequest):
 @app.post("/api/android/media-backup")
 def media_backup(req: MediaBackupRequest):
     try: return backup_accessible_media(req.serial, req.destination)
+    except ValueError as e: raise HTTPException(400, str(e))
+
+@app.post("/api/android/media-restore")
+def media_restore(req: MediaRestoreRequest):
+    try: return restore_accessible_media(req.serial, req.source_folder)
     except ValueError as e: raise HTTPException(400, str(e))
 
 @app.post("/api/android/phone-transfer")
