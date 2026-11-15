@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from device_service import (tool_status, discover_android, android_properties,
     android_diagnostics, reboot_android, inspect_firmware_zip, iphone_status,
-    recovery_guidance, classify_android, windows_usb_inventory, readiness_report)
+    recovery_guidance, classify_android, windows_usb_inventory, readiness_report, prepare_factory_reset)
 
 app = FastAPI(title="Vendora Mobile Toolkit API", version="0.5.0")
 
@@ -14,6 +14,10 @@ class RebootRequest(DeviceRequest):
 
 class FirmwareRequest(BaseModel):
     path: str = Field(min_length=1, max_length=2048)
+
+class FactoryResetPrepareRequest(DeviceRequest):
+    backup_confirmed: bool
+    confirmation: str = Field(min_length=1, max_length=64)
 
 @app.get("/api/health")
 def health():
@@ -59,6 +63,13 @@ def diagnostics(req: DeviceRequest):
 def reboot(req: RebootRequest):
     try: return reboot_android(req.serial, req.target)
     except ValueError as e: raise HTTPException(400, str(e))
+
+@app.post("/api/android/factory-reset/prepare")
+def factory_reset_prepare(req: FactoryResetPrepareRequest):
+    try:
+        return prepare_factory_reset(req.serial, req.backup_confirmed, req.confirmation)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 @app.post("/api/firmware/inspect")
 def firmware(req: FirmwareRequest):
