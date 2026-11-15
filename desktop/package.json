@@ -7,7 +7,7 @@
   "scripts": {
     "start": "electron .",
     "prepare:release": "node build.cjs",
-    "dist:win": "npm run prepare:release && electron-builder --win nsis x64"
+    "dist:win": "npm run prepare:release && electron-builder --win nsis --x64"
   },
   "devDependencies": {
     "electron": "^33.0.0",
