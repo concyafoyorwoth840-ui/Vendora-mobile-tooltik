@@ -1,5 +1,5 @@
 from __future__ import annotations
-import hashlib, json, os, re, shutil, subprocess, zipfile, secrets, threading, time
+import hashlib, json, os, re, shutil, subprocess, zipfile, secrets, threading, time, tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -189,6 +189,56 @@ def backup_accessible_media(serial: str, destination: str) -> dict[str, Any]:
             "limitations": ["Copies only accessible shared-storage folders; it is not a full-device backup.",
                 "Does not recover deleted files, private app data, messages or protected content.",
                 "Keep the phone unlocked and do not disconnect it until the export finishes."]}
+
+def transfer_shared_media(source_serial: str, destination_serial: str) -> dict[str, Any]:
+    """Copy accessible shared media between two authorised ADB Android devices via this PC."""
+    if not _valid_serial(source_serial) or not _valid_serial(destination_serial):
+        raise ValueError("Select two valid Android device serials.")
+    if source_serial == destination_serial:
+        raise ValueError("Choose two different phones for transfer.")
+    adb = _tool_path("adb")
+    for serial, role in ((source_serial, "source"), (destination_serial, "destination")):
+        state = _run([adb, "-s", serial, "get-state"])
+        if not state["ok"] or state.get("stdout", "").strip() != "device":
+            raise ValueError(f"The {role} phone is not authorised and online in ADB. Unlock it and approve this computer.")
+    folders = ("DCIM", "Pictures", "Movies", "Music", "Download")
+    transferred, skipped, failures = [], [], []
+    transfer_root = "/sdcard/Vendora_Transfer_" + datetime.now().strftime("%Y%m%d_%H%M%S")
+    try:
+        with tempfile.TemporaryDirectory(prefix="vendora-transfer-") as staging:
+            for folder in folders:
+                remote_source = "/sdcard/" + folder
+                exists = _run([adb, "-s", source_serial, "shell", "test", "-d", remote_source], timeout=15)
+                if not exists["ok"]:
+                    skipped.append(folder)
+                    continue
+                local = Path(staging) / folder
+                pulled = _run([adb, "-s", source_serial, "pull", remote_source, str(local)], timeout=600)
+                if not pulled["ok"]:
+                    failures.append({"folder": folder, "stage": "read_source", "error": pulled.get("stderr") or pulled.get("error") or "ADB pull failed"})
+                    continue
+                remote_target = transfer_root + "/" + folder
+                made = _run([adb, "-s", destination_serial, "shell", "mkdir", "-p", remote_target], timeout=15)
+                if not made["ok"]:
+                    failures.append({"folder": folder, "stage": "prepare_destination", "error": made.get("stderr") or made.get("error") or "Could not create destination folder"})
+                    continue
+                pushed = _run([adb, "-s", destination_serial, "push", str(local), remote_target], timeout=600)
+                if pushed["ok"]:
+                    transferred.append({"folder": folder, "destination": remote_target})
+                else:
+                    failures.append({"folder": folder, "stage": "write_destination", "error": pushed.get("stderr") or pushed.get("error") or "ADB push failed"})
+    except OSError as error:
+        raise ValueError(f"Could not create temporary transfer workspace: {error}") from error
+    audit("shared_media_phone_transfer", {"source_serial": source_serial, "destination_serial": destination_serial,
+          "destination": transfer_root, "transferred_folders": [x["folder"] for x in transferred],
+          "skipped_folders": skipped, "failed_folders": [x["folder"] for x in failures]})
+    return {"ok": bool(transferred) and not failures, "operation": "shared_media_phone_to_phone_transfer",
+            "source_serial": source_serial, "destination_serial": destination_serial,
+            "destination_folder": transfer_root, "transferred": transferred, "skipped": skipped, "failures": failures,
+            "limitations": ["Transfers accessible shared-storage folders only; it does not migrate app-private data, WhatsApp databases, messages, settings or accounts.",
+                "Both phones must remain connected, unlocked and authorised in ADB.",
+                "Files are copied into a new Vendora_Transfer folder on the destination phone; existing folders and files are not overwritten."]}
+
 
 def android_diagnostics(serial: str) -> dict[str, Any]:
     if not _valid_serial(serial): raise ValueError("Invalid device serial")
