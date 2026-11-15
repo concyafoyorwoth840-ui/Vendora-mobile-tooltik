@@ -1,4 +1,4 @@
-# Vendora Mobile Toolkit — Development Build 0.4
+# Vendora Mobile Toolkit — Development Build 0.6.0
 
 Windows-first desktop service toolkit for owner-authorised Android and Apple device diagnostics and recovery guidance.
 
@@ -6,6 +6,8 @@ Windows-first desktop service toolkit for owner-authorised Android and Apple dev
 - Electron desktop interface and local FastAPI backend.
 - Android ADB/Fastboot discovery, properties, diagnostics and safe reboot targets.
 - Firmware ZIP integrity and SHA-256 inspection (inspection only; no flashing).
+- Owner Recovery workflows for forgotten screen locks, authorised carrier/network unlocking, and official OEM bootloader unlocking.
+- Explicit limitations and owner/data-protection warnings for all recovery workflows.
 - Manufacturer readiness catalogue for Samsung, Google, Qualcomm, MediaTek, Apple and generic Android.
 - Conservative Android family classification from reported device properties.
 - Read-only Windows USB Plug-and-Play inventory endpoint.
@@ -13,7 +15,7 @@ Windows-first desktop service toolkit for owner-authorised Android and Apple dev
 - Windows x64 NSIS installer build configuration and GitHub Actions workflow.
 
 ## Status and limitations
-Manufacturer protocol profiles are readiness records, not completed vendor flashing engines. Qualcomm EDL and MediaTek BootROM/Preloader servicing are not implemented. Samsung Download Mode servicing is not implemented. Apple discovery remains experimental. No firmware is automatically selected or flashed. No screen-lock, FRP, Activation Lock, account or bootloader bypass is provided. Physical-device validation is outstanding; unknown models must remain unverified.
+Manufacturer protocol profiles are readiness records, not completed vendor flashing engines. Qualcomm EDL and MediaTek BootROM/Preloader servicing are not implemented. Samsung Download Mode servicing is not implemented. Apple discovery remains experimental. No firmware is automatically selected or flashed. Owner recovery includes official forgotten-screen-lock guidance, carrier-authorised SIM/network unlock request guidance, and manufacturer-supported bootloader unlock guidance. These are guided workflows, not universal automated unlock engines. No PIN/pattern removal, FRP bypass, Activation Lock bypass, account bypass, carrier-code generation, OEM eligibility bypass or generic forced bootloader unlock is provided. Physical-device validation is outstanding; unknown models must remain unverified.
 
 ## Current desktop actions\nThe desktop interface now exposes the safe Android reboot endpoint with an explicit confirmation, plus iPhone tooling-status and Windows USB-inventory checks. The iPhone endpoint now attempts read-only discovery through the optional `pymobiledevice3 usbmux list` command. Install `pymobiledevice3` separately and, on Windows, install Apple's classic iTunes package to provide Apple Mobile Device Service. Discovery is not iOS repair or restore. See the [pymobiledevice3 installation guide](https://github.com/doronz88/pymobiledevice3/blob/master/docs/installation.md).\n\n## API additions
 - GET /api/readiness — tool availability, protocol profiles and limitations.
@@ -41,3 +43,10 @@ For a local Windows build with Python 3.11+ and Node.js 20+:
 3. Run `npm run dist:win` inside `desktop`.
 
 The workflow has been prepared but has not yet been executed on a Windows runner. No installer is claimed as built or verified yet.
+
+
+## Owner recovery workflows
+- **Forgotten screen lock:** provides official account/manufacturer recovery steps and explains when an authorised reset may erase local data. It does not remove credentials or bypass anti-theft checks.
+- **SIM/network unlock:** provides a carrier eligibility checklist and authorised request procedure. Carrier eligibility lookup and unlock-code generation require a supported carrier integration and are not implemented.
+- **Bootloader unlock:** provides OEM compatibility checks, consequences and official procedure guidance. There is no generic fastboot unlock command and no automated OEM unlock engine in this build.
+- Device-changing operations remain separately approval-gated. These three guidance workflows do not themselves issue device commands.
