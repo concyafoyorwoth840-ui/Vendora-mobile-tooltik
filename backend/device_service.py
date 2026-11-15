@@ -101,7 +101,7 @@ def android_properties(serial: str) -> dict[str, Any]:
         m = re.match(r"\[([^]]+)\]: \[(.*)\]", line)
         if m: props[m.group(1)] = m.group(2)
     keys = ("ro.product.manufacturer", "ro.product.model", "ro.product.device", "ro.build.version.release",
-        "ro.build.version.sdk", "ro.build.fingerprint", "ro.boot.verifiedbootstate", "ro.boot.flash.locked")
+        "ro.build.version.sdk", "ro.build.fingerprint", "ro.boot.verifiedbootstate", "ro.boot.flash.locked",\n        "ro.board.platform", "ro.hardware", "ro.boot.hardware", "ro.soc.model")
     return {"ok": True, "serial": serial, "properties": {k: props.get(k, "") for k in keys}}
 
 def classify_android(manufacturer: str = "", model: str = "", device: str = "", fingerprint: str = "") -> dict[str, Any]:
