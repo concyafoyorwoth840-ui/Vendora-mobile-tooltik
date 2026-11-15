@@ -36,10 +36,18 @@ def test_serial_parser():
 def test_fastboot_parser():
     assert ds._parse_fastboot_devices("ABC123\tfastboot\n")==[{"serial":"ABC123","state":"fastboot"}]
 
-def test_manufacturer_classification_profiles():
-    assert ds.classify_android("samsung","SM-G998W")["protocol_profile"]=="samsung"
-    assert ds.classify_android("Google","Pixel 8")["protocol_profile"]=="google"
-    assert ds.classify_android("","","","vendor/mt6789")["protocol_profile"]=="mediatek"
 
-def test_readiness_limitations_are_explicit():
-    assert any("not implemented" in x.lower() for x in ds.readiness_report()["limitations"])
+def test_manufacturer_classification_profiles():
+    assert ds.classify_android("samsung", "SM-G998W")["protocol_profile"] == "samsung"
+    assert ds.classify_android("Google", "Pixel 8")["protocol_profile"] == "google"
+    assert ds.classify_android("", "", "", "vendor/mt6789")["protocol_profile"] == "mediatek"
+
+def test_readiness_is_explicit_about_limitations():
+    report = ds.readiness_report()
+    assert "manufacturer_profiles" in report
+    assert any("not implemented" in x.lower() for x in report["limitations"])
+
+def test_usb_inventory_is_graceful_off_windows(monkeypatch):
+    monkeypatch.setattr(ds.os, "name", "posix")
+    result = ds.windows_usb_inventory()
+    assert result["supported"] is False
