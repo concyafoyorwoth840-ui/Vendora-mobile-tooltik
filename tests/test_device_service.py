@@ -228,3 +228,36 @@ def test_flashing_is_not_available_as_an_engine():
     report = ds.readiness_report()
     assert any("flashing engines are not implemented" in item.lower()
                for item in report["limitations"])
+
+
+def test_boot_repair_assessment_is_read_only_when_no_device(monkeypatch):
+    monkeypatch.setattr(ds, "discover_android", lambda: {
+        "adb": [], "fastboot": [], "adb_available": True, "fastboot_available": True, "warnings": []
+    })
+    monkeypatch.setattr(ds, "audit", lambda *args, **kwargs: None)
+    result = ds.assess_boot_repair(symptom="stuck_logo")
+    assert result["ok"] is True
+    assert result["read_only"] is True
+    assert result["device_mode"] == "not_detected"
+    assert any("official driver" in x for x in result["next_steps"])
+
+def test_boot_repair_assessment_rejects_invalid_symptom():
+    with pytest.raises(ValueError):
+        ds.assess_boot_repair(symptom="erase")
+
+def test_boot_repair_fastboot_reads_identity_without_modifying_device(monkeypatch):
+    commands = []
+    monkeypatch.setattr(ds, "discover_android", lambda: {
+        "adb": [], "fastboot": [{"serial": "FAST123", "state": "fastboot"}],
+        "adb_available": True, "fastboot_available": True, "warnings": []
+    })
+    def fake_run(command, timeout=12):
+        commands.append(command)
+        return {"ok": True, "stdout": "", "stderr": "(bootloader) product: test"}
+    monkeypatch.setattr(ds, "_run", fake_run)
+    monkeypatch.setattr(ds, "audit", lambda *args, **kwargs: None)
+    result = ds.assess_boot_repair("FAST123", "boot_loop")
+    assert result["device_mode"] == "fastboot"
+    assert len(commands) == 4
+    assert all("getvar" in c for c in commands)
+    assert not any(any(x in c for x in ("flash", "erase", "format", "reboot", "unlock")) for c in commands)
