@@ -78,3 +78,17 @@ def test_frp_recovery_is_owner_guidance_not_bypass():
     assert any("does not bypass" in item and "FRP" in item for item in body["limitations"])
     assert any("previously added and synced" in item for item in body["steps"])
     assert any("password" in item.lower() for item in body["limitations"])
+
+
+def test_boot_repair_assessment_endpoint_is_read_only(monkeypatch):
+    monkeypatch.setattr(api, "assess_boot_repair", lambda serial="", symptom="stuck_logo": {
+        "ok": True, "read_only": True, "symptom": symptom, "device_mode": "not_detected",
+        "assessment": "No service protocol detected", "next_steps": [], "limitations": ["No flashing"]
+    })
+    response = client.post("/api/boot-repair/assess", json={"symptom": "stuck_logo"})
+    assert response.status_code == 200
+    assert response.json()["read_only"] is True
+
+def test_boot_repair_rejects_unknown_symptom():
+    response = client.post("/api/boot-repair/assess", json={"symptom": "wipe_phone"})
+    assert response.status_code == 400
