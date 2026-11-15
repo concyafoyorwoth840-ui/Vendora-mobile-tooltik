@@ -167,3 +167,64 @@ def test_discovery_reports_adb_command_failure(monkeypatch):
     monkeypatch.setattr(ds, "tool_status", lambda: {"adb": True, "fastboot": True})
     result = ds.discover_android()
     assert any("daemon unavailable" in warning for warning in result["warnings"])
+
+
+def test_reboot_requires_backend_issued_one_time_approval(monkeypatch):
+    ds._PENDING_CHALLENGES.clear()
+    ds._APPROVED_TOKENS.clear()
+    monkeypatch.setattr(ds, "android_properties", lambda serial: {
+        "ok": True, "properties": {"ro.product.model": "Test"}
+    })
+    monkeypatch.setattr(ds, "audit", lambda *args, **kwargs: None)
+    called = []
+    monkeypatch.setattr(ds, "_run", lambda command, timeout=12: (
+        called.append(command) or {"ok": True, "returncode": 0, "stdout": "", "stderr": ""}
+    ))
+    with pytest.raises(ValueError, match="approval"):
+        ds.reboot_android("TEST123", "recovery")
+    preview = ds.create_operation_preview("TEST123", "reboot", "recovery")
+    approved = ds.approve_operation(preview["challenge_id"])
+    result = ds.reboot_android("TEST123", "recovery", approved["approval_token"])
+    assert result["ok"] is True
+    assert len(called) == 1
+    with pytest.raises(ValueError, match="Approval"):
+        ds.reboot_android("TEST123", "recovery", approved["approval_token"])
+    assert len(called) == 1
+
+
+def test_approval_is_bound_to_exact_device_and_target(monkeypatch):
+    ds._PENDING_CHALLENGES.clear()
+    ds._APPROVED_TOKENS.clear()
+    monkeypatch.setattr(ds, "android_properties", lambda serial: {"ok": True, "properties": {}})
+    monkeypatch.setattr(ds, "audit", lambda *args, **kwargs: None)
+    preview = ds.create_operation_preview("PHONE_A", "reboot", "system")
+    token = ds.approve_operation(preview["challenge_id"])["approval_token"]
+    with pytest.raises(ValueError, match="does not match"):
+        ds.reboot_android("PHONE_B", "system", token)
+    assert not ds._APPROVED_TOKENS
+
+
+def test_factory_recovery_requires_approval_and_never_wipes(monkeypatch):
+    ds._PENDING_CHALLENGES.clear()
+    ds._APPROVED_TOKENS.clear()
+    monkeypatch.setattr(ds, "android_properties", lambda serial: {"ok": True, "properties": {}})
+    monkeypatch.setattr(ds, "audit", lambda *args, **kwargs: None)
+    commands = []
+    monkeypatch.setattr(ds, "_run", lambda command, timeout=12: (
+        commands.append(command) or {"ok": True, "returncode": 0, "stdout": "", "stderr": ""}
+    ))
+    with pytest.raises(ValueError, match="approval"):
+        ds.prepare_factory_reset("TEST123", True, "PREPARE RECOVERY")
+    preview = ds.create_operation_preview("TEST123", "factory_reset_prepare",
+        backup_confirmed=True, confirmation="PREPARE RECOVERY")
+    token = ds.approve_operation(preview["challenge_id"])["approval_token"]
+    result = ds.prepare_factory_reset("TEST123", True, "PREPARE RECOVERY", token)
+    assert result["ok"] is True
+    assert commands == [[ds._tool_path("adb"), "-s", "TEST123", "reboot", "recovery"]]
+    assert "wipe" not in " ".join(commands[0]).lower()
+
+
+def test_flashing_is_not_available_as_an_engine():
+    report = ds.readiness_report()
+    assert any("flashing engines are not implemented" in item.lower()
+               for item in report["limitations"])
