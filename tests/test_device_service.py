@@ -118,3 +118,21 @@ def test_android_diagnostics_returns_parsed_summary(monkeypatch):
     assert result["summary"]["battery"]["level_percent"] == 90
     assert result["summary"]["data_storage"]["available"] == "44G"
     assert result["summary"]["uptime"] == "up 2 days"
+
+
+def test_audit_disk_error_does_not_crash_operation(monkeypatch, tmp_path):
+    bad_path = tmp_path / "missing" / "audit.jsonl"
+    monkeypatch.setattr(ds, "AUDIT_PATH", bad_path)
+    def fail_mkdir(*args, **kwargs):
+        raise OSError("disk unavailable")
+    monkeypatch.setattr(ds.Path, "mkdir", fail_mkdir)
+    ds.audit("test", {"serial": "TEST123"})
+
+
+def test_subprocess_os_error_is_reported(monkeypatch):
+    def fail_run(*args, **kwargs):
+        raise OSError("access denied")
+    monkeypatch.setattr(ds.subprocess, "run", fail_run)
+    result = ds._run(["fake-tool"])
+    assert result["ok"] is False
+    assert "access denied" in result["error"]
