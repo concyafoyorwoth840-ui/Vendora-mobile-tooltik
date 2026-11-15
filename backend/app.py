@@ -12,7 +12,7 @@ class DeviceRequest(BaseModel):
 
 class RebootRequest(DeviceRequest):
     target: str
-    approval_token: str = Field(min_length=1, max_length=256)
+    approval_token: str = Field(default="", max_length=256)
 
 class FirmwareRequest(BaseModel):
     path: str = Field(min_length=1, max_length=2048)
