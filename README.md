@@ -23,6 +23,15 @@ Manufacturer protocol profiles are readiness records, not completed vendor flash
 ## Tests
 Run from the project root: `python -m pytest -q`.
 
+## Reliability, packaging and source protection
+- Desktop startup waits for the local backend health check and records diagnostic logs under the user's application data folder.
+- The desktop app uses a single-instance lock, backend restart attempts, renderer crash recovery and graceful shutdown handling.
+- Audit entries are flushed to disk; audit-storage errors are non-fatal to device operations.
+- Release preparation minifies the desktop JavaScript and packages only the release bundle, not the original desktop JavaScript file.
+- Electron resources are packaged in ASAR and the NSIS installer uses maximum compression.
+- The backend is packaged as a PyInstaller executable rather than loose Python source files. This raises the effort required to inspect it but does not make reverse engineering impossible; Python bytecode and Electron resources can still be extracted by determined users.
+- Installer size and recovery behaviour must be measured on a real Windows build. No size target or crash-proof guarantee is claimed before that testing.
+
 ## External device tools\n- Android: install the official [Android SDK Platform-Tools](https://developer.android.com/tools/releases/platform-tools) for `adb` and `fastboot`. The current installer does not bundle these tools or OEM USB drivers.\n- iPhone/iPad: install `pymobiledevice3` separately; Windows also needs Apple's classic iTunes package for Apple Mobile Device Service. The Microsoft Store Apple Devices service has known discovery limitations in some Wi-Fi scenarios.\n\n## Windows installer
 The GitHub Actions workflow builds a Windows x64 NSIS installer. Open **Actions**, select **Windows installer**, and choose **Run workflow**, or push a `v*` tag. Download the resulting installer artifact.
 
