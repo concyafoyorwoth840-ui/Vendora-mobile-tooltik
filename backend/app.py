@@ -106,6 +106,11 @@ def recovery(platform: str):
     try: return {"platform": platform, "steps": recovery_guidance(platform)}
     except ValueError as e: raise HTTPException(400, str(e))
 
+@app.post("/api/firmware/flash")
+def firmware_flash_unavailable():
+    # Fail closed until an OEM-specific, validated flashing engine exists.
+    raise HTTPException(501, "Firmware flashing is not implemented for this device family. No device command was executed.")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8765)
