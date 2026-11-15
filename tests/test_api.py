@@ -92,3 +92,14 @@ def test_boot_repair_assessment_endpoint_is_read_only(monkeypatch):
 def test_boot_repair_rejects_unknown_symptom():
     response = client.post("/api/boot-repair/assess", json={"symptom": "wipe_phone"})
     assert response.status_code == 400
+
+
+def test_automatic_repair_preparation_endpoint_is_read_only(monkeypatch):
+    monkeypatch.setattr(api, "build_repair_plan", lambda serial="", symptom="stuck_logo", firmware_path="", programmer_path="": {
+        "ok": True, "read_only": True, "execution_enabled": False,
+        "repair_ready": False, "blockers": ["No validated engine"]
+    })
+    response = client.post("/api/repair/prepare", json={"symptom": "stuck_logo"})
+    assert response.status_code == 200
+    assert response.json()["read_only"] is True
+    assert response.json()["execution_enabled"] is False
