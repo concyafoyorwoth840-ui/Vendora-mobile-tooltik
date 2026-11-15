@@ -146,3 +146,18 @@ def test_media_backup_endpoint_uses_selected_device_and_destination(monkeypatch,
     assert response.json()["ok"] is True
     assert captured["serial"] == "TEST123"
     assert captured["destination"] == str(tmp_path / "backup")
+
+
+def test_phone_transfer_endpoint_calls_transfer_engine(monkeypatch):
+    captured = {}
+    def fake_transfer(source_serial, destination_serial):
+        captured["source"] = source_serial
+        captured["destination"] = destination_serial
+        return {"ok": True, "operation": "shared_media_phone_to_phone_transfer"}
+    monkeypatch.setattr(api, "transfer_shared_media", fake_transfer)
+    response = client.post("/api/android/phone-transfer", json={
+        "source_serial": "PHONE_A", "destination_serial": "PHONE_B"
+    })
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    assert captured == {"source": "PHONE_A", "destination": "PHONE_B"}
