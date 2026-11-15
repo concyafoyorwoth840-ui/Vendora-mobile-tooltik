@@ -13,7 +13,8 @@ let restartCount = 0;
 let restartTimer = null;
 let logStream = null;
 
-if (!app.requestSingleInstanceLock()) {
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
   app.quit();
 } else {
   app.on("second-instance", () => {
@@ -31,6 +32,7 @@ function log(message) {
       const logDir = path.join(app.getPath("userData"), "logs");
       fs.mkdirSync(logDir, { recursive: true });
       logStream = fs.createWriteStream(path.join(logDir, "vendora.log"), { flags: "a" });
+    logStream.on("error", () => { logStream = null; });
     }
     logStream.write(line);
   } catch (_) {
@@ -148,7 +150,7 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
-  if (quitting) return;
+  if (!hasSingleInstanceLock || quitting) return;
   startBackend();
   const ready = await waitForBackend();
   createWindow();
