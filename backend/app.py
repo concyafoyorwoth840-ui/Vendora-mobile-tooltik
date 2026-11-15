@@ -4,7 +4,7 @@ from device_service import (tool_status, discover_android, android_properties,
     android_diagnostics, reboot_android, inspect_firmware_zip, iphone_status,
     recovery_guidance, classify_android, windows_usb_inventory, readiness_report)
 
-app = FastAPI(title="Vendora Mobile Toolkit API", version="0.4.0")
+app = FastAPI(title="Vendora Mobile Toolkit API", version="0.5.0")
 
 class DeviceRequest(BaseModel):
     serial: str = Field(min_length=1, max_length=128)
