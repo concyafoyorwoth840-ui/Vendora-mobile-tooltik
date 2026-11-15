@@ -190,6 +190,44 @@ def backup_accessible_media(serial: str, destination: str) -> dict[str, Any]:
                 "Does not recover deleted files, private app data, messages or protected content.",
                 "Keep the phone unlocked and do not disconnect it until the export finishes."]}
 
+def restore_accessible_media(serial: str, source_folder: str) -> dict[str, Any]:
+    """Restore selected common media folders from a local backup into a new phone folder."""
+    if not _valid_serial(serial):
+        raise ValueError("A valid Android device serial is required.")
+    if not source_folder or len(source_folder) > 2048:
+        raise ValueError("Choose a valid backup folder on this computer.")
+    source = Path(source_folder).expanduser().resolve()
+    if not source.is_dir() or source == Path(source.anchor):
+        raise ValueError("Choose an existing backup folder, not a drive root.")
+    folders = ("DCIM", "Pictures", "Movies", "Music", "Download")
+    available = [name for name in folders if (source / name).is_dir()]
+    if not available:
+        raise ValueError("The selected folder contains no supported Vendora media folders.")
+    adb = _tool_path("adb")
+    state = _run([adb, "-s", serial, "get-state"])
+    if not state["ok"] or state.get("stdout", "").strip() != "device":
+        raise ValueError("The selected phone is not authorised and online in ADB. Unlock it and approve this computer.")
+    restore_root = "/sdcard/Vendora_Restore_" + datetime.now().strftime("%Y%m%d_%H%M%S")
+    restored, failures = [], []
+    made = _run([adb, "-s", serial, "shell", "mkdir", "-p", restore_root], timeout=15)
+    if not made["ok"]:
+        raise ValueError("Could not create a new restore folder on the phone.")
+    for folder in available:
+        result = _run([adb, "-s", serial, "push", str(source / folder), restore_root + "/" + folder], timeout=600)
+        if result["ok"]:
+            restored.append({"folder": folder, "destination": restore_root + "/" + folder})
+        else:
+            failures.append({"folder": folder, "error": result.get("stderr") or result.get("error") or "ADB push failed"})
+    audit("accessible_media_restore", {"serial": serial, "source": str(source), "destination": restore_root,
+          "restored_folders": restored, "failed_folders": failures})
+    return {"ok": bool(restored) and not failures, "operation": "accessible_shared_media_restore",
+            "serial": serial, "source": str(source), "destination_folder": restore_root,
+            "restored": restored, "failures": failures,
+            "limitations": ["Restores only DCIM, Pictures, Movies, Music and Download folders found in the selected backup.",
+                "Files are placed in a new Vendora_Restore folder; existing phone folders are not overwritten.",
+                "This does not restore apps, messages, WhatsApp chats, accounts, settings or private app data."]}
+
+
 def transfer_shared_media(source_serial: str, destination_serial: str) -> dict[str, Any]:
     """Copy accessible shared media between two authorised ADB Android devices via this PC."""
     if not _valid_serial(source_serial) or not _valid_serial(destination_serial):
