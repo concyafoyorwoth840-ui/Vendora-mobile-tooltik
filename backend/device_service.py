@@ -235,7 +235,9 @@ def recovery_guidance(platform: str) -> list[str]:
 
 def windows_usb_inventory() -> dict[str, Any]:
     if os.name != "nt": return {"supported": False, "devices": [], "message": "Windows USB inventory is available only on Windows."}
-    script = "Get-PnpDevice -PresentOnly | Where-Object { $_.InstanceId -like 'USB*' } | Select-Object Status,Class,FriendlyName,InstanceId | ConvertTo-Json -Compress"
+    # Include composite USB interfaces and Windows portable-device (MTP/WPD) nodes.
+    # Inventory only: this never installs drivers or changes device state.
+    script = "Get-PnpDevice -PresentOnly | Where-Object { $_.InstanceId -match '^(USB|USBSTOR)\\\\' -or $_.InstanceId -like 'SWD\\\\WPDBUSENUM*' } | Select-Object Status,Class,FriendlyName,InstanceId | ConvertTo-Json -Compress"
     result = _run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], timeout=20)
     if not result["ok"]: return {"supported": True, "devices": [], "message": result.get("stderr") or result.get("error") or "Unable to query Windows devices."}
     try:
