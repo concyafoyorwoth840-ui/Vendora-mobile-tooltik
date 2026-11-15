@@ -136,3 +136,34 @@ def test_subprocess_os_error_is_reported(monkeypatch):
     result = ds._run(["fake-tool"])
     assert result["ok"] is False
     assert "access denied" in result["error"]
+
+def test_bundled_platform_tools_are_preferred(monkeypatch, tmp_path):
+    tools = tmp_path / "platform-tools"
+    tools.mkdir()
+    adb = tools / ("adb.exe" if ds.os.name == "nt" else "adb")
+    adb.write_text("test executable placeholder")
+    monkeypatch.setenv("VENDORA_PLATFORM_TOOLS", str(tools))
+    monkeypatch.setattr(ds.shutil, "which", lambda name: "/system/"+name)
+    assert ds._tool_path("adb") == str(adb)
+
+def test_usb_inventory_queries_usb_and_mtp_nodes(monkeypatch):
+    monkeypatch.setattr(ds.os, "name", "nt")
+    captured = {}
+    def fake_run(command, timeout=12):
+        captured["command"] = command[-1]
+        return {"ok": True, "stdout": "[]"}
+    monkeypatch.setattr(ds, "_run", fake_run)
+    result = ds.windows_usb_inventory()
+    assert result["supported"] is True
+    assert "USBSTOR" in captured["command"]
+    assert "WPDBUSENUM" in captured["command"]
+
+def test_discovery_reports_adb_command_failure(monkeypatch):
+    def fake_run(command, timeout=12):
+        if "adb" in command[0]:
+            return {"ok": False, "returncode": 1, "stdout": "", "stderr": "daemon unavailable"}
+        return {"ok": True, "stdout": "", "stderr": ""}
+    monkeypatch.setattr(ds, "_run", fake_run)
+    monkeypatch.setattr(ds, "tool_status", lambda: {"adb": True, "fastboot": True})
+    result = ds.discover_android()
+    assert any("daemon unavailable" in warning for warning in result["warnings"])
